@@ -29,6 +29,7 @@ export default function AgentMaster({ agents, role, loading, onRefresh }: AgentM
   const [parsedAgents, setParsedAgents] = useState<Agent[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [isCsvImporting, setIsCsvImporting] = useState(false);
+  const [importFeedback, setImportFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const resetForm = () => {
     setEmployeeId("");
@@ -165,6 +166,7 @@ export default function AgentMaster({ agents, role, loading, onRefresh }: AgentM
   const handleCommitCsvImport = async () => {
     if (parsedAgents.length === 0) return;
     setIsCsvImporting(true);
+    setImportFeedback(null);
 
     let successCount = 0;
     let failureCount = 0;
@@ -180,16 +182,37 @@ export default function AgentMaster({ agents, role, loading, onRefresh }: AgentM
         }
       }
 
-      alert(`Roster update completed successfully!\n\nAuthorized Agents registered: ${successCount}\nFailed: ${failureCount}`);
+      setImportFeedback({
+        type: "success",
+        text: `Roster update completed successfully! Registered ${successCount} agents (${failureCount} failed).`
+      });
 
-      // Reset and refresh database state
+      // Try calling alert safely, but don't fail if the browser/iframe denies modals
+      try {
+        alert(`Roster update completed successfully!\n\nAuthorized Agents registered: ${successCount}\nFailed: ${failureCount}`);
+      } catch (alertErr) {
+        console.warn("System modal alert blocked by user's browser sandbox environment:", alertErr);
+      }
+
+      // Reset and refresh database state after a brief visual confirmation delay or instantly
       setCsvFile(null);
       setParsedAgents([]);
-      setIsCsvOpen(false);
+      // Keep panel open briefly if they want to read, or close it after 1.5 seconds so they can see success
+      setTimeout(() => {
+        setIsCsvOpen(false);
+        setImportFeedback(null);
+      }, 2500);
+
       onRefresh();
     } catch (globalErr) {
       console.error("Bulk upload transaction crash:", globalErr);
-      alert("Failed during bulk upload execution. Please try again.");
+      setImportFeedback({
+        type: "error",
+        text: "Failed during bulk upload execution. Check operations and try again."
+      });
+      try {
+        alert("Failed during bulk upload execution. Please try again.");
+      } catch (alertErr) {}
     } finally {
       setIsCsvImporting(false);
     }
@@ -439,6 +462,16 @@ export default function AgentMaster({ agents, role, loading, onRefresh }: AgentM
                   )}
                 </div>
               </div>
+
+              {importFeedback && (
+                <div id="csv-import-feedback-banner" className={`mt-3 p-3 rounded-xl text-xs font-semibold ${
+                  importFeedback.type === "success" 
+                    ? "bg-emerald-50 border border-emerald-250 text-emerald-800" 
+                    : "bg-rose-50 border border-rose-250 text-rose-800"
+                }`}>
+                  {importFeedback.type === "success" ? "✅" : "⚠️"} {importFeedback.text}
+                </div>
+              )}
 
               <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <span className="text-[10px] text-slate-400 font-semibold leading-normal max-w-sm">

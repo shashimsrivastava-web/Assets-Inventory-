@@ -40,6 +40,7 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
   const [parsedAssets, setParsedAssets] = useState<Asset[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [isExcelImporting, setIsExcelImporting] = useState(false);
+  const [importFeedback, setImportFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const resetForm = () => {
     setAssetId("");
@@ -171,6 +172,7 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
   const handleCommitExcelImport = async () => {
     if (parsedAssets.length === 0) return;
     setIsExcelImporting(true);
+    setImportFeedback(null);
 
     let successCount = 0;
     let failureCount = 0;
@@ -186,15 +188,33 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
         }
       }
 
-      alert(`Excel master inventory import finished!\n\nRegistered devices: ${successCount}\nFailed: ${failureCount}`);
+      setImportFeedback({
+        type: "success",
+        text: `Excel master inventory import finished! Registered ${successCount} devices (${failureCount} failed).`
+      });
+
+      try {
+        alert(`Excel master inventory import finished!\n\nRegistered devices: ${successCount}\nFailed: ${failureCount}`);
+      } catch (alertErr) {
+        console.warn("System modal alert blocked by user's browser sandbox environment:", alertErr);
+      }
       
       setExcelFile(null);
       setParsedAssets([]);
-      setIsExcelOpen(false);
+      setTimeout(() => {
+        setIsExcelOpen(false);
+        setImportFeedback(null);
+      }, 2500);
       onRefresh();
     } catch (globalErr) {
       console.error("Bulk database insert failed:", globalErr);
-      alert("Encountered a database issue compiling bulk imports.");
+      setImportFeedback({
+        type: "error",
+        text: "Encountered database compilation error or write issue."
+      });
+      try {
+        alert("Encountered a database issue compiling bulk imports.");
+      } catch (alertErr) {}
     } finally {
       setIsExcelImporting(false);
     }
@@ -482,6 +502,16 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
                   )}
                 </div>
               </div>
+
+              {importFeedback && (
+                <div id="excel-import-feedback-banner" className={`mt-3 p-3 rounded-xl text-xs font-semibold ${
+                  importFeedback.type === "success" 
+                    ? "bg-emerald-50 border border-emerald-200 text-emerald-800" 
+                    : "bg-rose-50 border border-rose-250 text-rose-800"
+                }`}>
+                  {importFeedback.type === "success" ? "✅" : "⚠️"} {importFeedback.text}
+                </div>
+              )}
 
               <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <span className="text-[10px] text-slate-400 font-semibold leading-normal max-w-sm">
