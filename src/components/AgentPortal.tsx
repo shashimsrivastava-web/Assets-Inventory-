@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { Asset, Agent, Transaction, AssetStatus } from "../types";
+import { Asset, Agent, Transaction, AssetStatus, Handover } from "../types";
 import { 
   Key, ArrowUpRight, ArrowDownLeft, Clock, History, LogOut, LogIn, 
   UserCheck, Smartphone, CheckCircle, AlertTriangle, ShieldAlert,
-  Sliders, Calendar, FileText, Send, Camera
+  Sliders, Calendar, FileText, Send, Camera, ArrowLeftRight
 } from "lucide-react";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
-import { db, assetsCol, transactionsCol } from "../firebase";
+import { db, assetsCol, transactionsCol, handoversCol } from "../firebase";
 import { SmartphoneLogo } from "./Header";
 
 interface AgentPortalProps {
   assets: Asset[];
   agents: Agent[];
   transactions: Transaction[];
+  handovers: Handover[];
   activeShift: string;
   onRefresh: () => void;
   onAddAlert: (
@@ -28,6 +29,7 @@ export default function AgentPortal({
   assets,
   agents,
   transactions,
+  handovers = [],
   activeShift,
   onRefresh,
   onAddAlert,
@@ -49,6 +51,12 @@ export default function AgentPortal({
 
   // Scanner Simulator State
   const [showScanner, setShowScanner] = useState(false);
+
+  // Device Handover State hooks
+  const [activeHandoverAssetId, setActiveHandoverAssetId] = useState<string | null>(null);
+  const [targetAgentUId, setTargetAgentUId] = useState("");
+  const [handoverRemarks, setHandoverRemarks] = useState("");
+  const [handoverSubmitting, setHandoverSubmitting] = useState(false);
 
   // Check physical sessionStorage to keep agent logged in across hot reloads if preferred
   useEffect(() => {
@@ -236,6 +244,146 @@ export default function AgentPortal({
     setSelectedAssetId(scannedId);
     setShowScanner(false);
     alert(`⚡ Scanned Device ID: ${scannedId}`);
+  };
+
+  // Initiate direct device handover with target agent verification
+  const handleInitiateHandover = async (assetId: string, toAgent: Agent) => {
+    if (!currentAgent) return;
+    const assetObj = assets.find((a) => a.id === assetId);
+    if (!assetObj) return;
+
+    setHandoverSubmitting(true);
+    const handoverDocId = assetId; // 1 active pending handover per device
+    const handoverData: Handover = {
+      id: handoverDocId,
+      assetId: assetId,
+      assetName: assetObj.name,
+      assetType: assetObj.type,
+      fromAgentId: currentAgent.id,
+      fromAgentName: currentAgent.name,
+      toAgentId: toAgent.id,
+      toAgentName: toAgent.name,
+      status: "pending",
+      timestamp: Date.now(),
+      remarks: handoverRemarks || "Shift Direct Handover"
+    };
+
+    try {
+      await setDoc(doc(handoversCol, handoverDocId), handoverData);
+      alert(`Handover registered in system! Agent ${toAgent.name} (${toAgent.id}) must now sign in & accept take-over receipt.`);
+      setActiveHandoverAssetId(null);
+      setTargetAgentUId("");
+      setHandoverRemarks("");
+      onRefresh();
+    } catch (err) {
+      console.error("Handover submit failed", err);
+      alert("Could not update secure hand-off database ledger.");
+    } finally {
+      setHandoverSubmitting(false);
+    }
+  };
+
+  // Accept/Complete device handover
+  const handleAcceptTakeover = async (ho: Handover) => {
+    if (!currentAgent) return;
+
+    const assetObj = assets.find((a) => a.id === ho.assetId);
+    if (!assetObj) {
+      alert("Asset target no longer exists inside inventory database.");
+      return;
+    }
+
+    const activeTxId = assetObj.currentAssignmentId;
+    const now = new Date();
+    const currentDateStr = now.toISOString().split("T")[0];
+    const currentTimeStr = now.toTimeString().split(" ")[0].slice(0, 5);
+    const currentMs = now.getTime();
+
+    try {
+      // 1. Close original custodian transaction record 
+      if (activeTxId) {
+        const txDocRef = doc(transactionsCol, activeTxId);
+        const txSnap = await getDoc(txDocRef);
+        let updatedTx: Partial<Transaction> = {
+          returnDate: currentDateStr,
+          returnTime: currentTimeStr,
+          returnTimestamp: currentMs,
+          returnRemarks: `Direct Handover completed to Agent ${ho.toAgentName} (${ho.toAgentId}).`,
+          status: "Returned"
+        };
+        if (txSnap.exists()) {
+          const txData = txSnap.data() as Transaction;
+          const diffMs = currentMs - txData.issueTimestamp;
+          updatedTx.durationMinutes = Math.max(0, Math.round(diffMs / (1000 * 60)));
+        }
+        await updateDoc(txDocRef, updatedTx);
+      }
+
+      // 2. Open new custodian transaction record for current target agent
+      const txId = `TX-${Date.now().toString().slice(-6)}-HO`;
+      const newTransaction: Transaction = {
+        id: txId,
+        assetId: ho.assetId,
+        assetName: ho.assetName,
+        assetType: ho.assetType,
+        employeeId: currentAgent.id,
+        agentName: currentAgent.name,
+        department: currentAgent.department || "General Shift Operations",
+        issueDate: currentDateStr,
+        issueTime: currentTimeStr,
+        issueTimestamp: currentMs,
+        shift: activeShift,
+        issueRemarks: `Direct Handover checkout accepted from Agent ${ho.fromAgentName} (${ho.fromAgentId}).`,
+        status: "Issued"
+      };
+      await setDoc(doc(transactionsCol, txId), newTransaction);
+
+      // 3. Point asset pointer record to new transaction id
+      await setDoc(doc(assetsCol, ho.assetId), {
+        ...assetObj,
+        status: AssetStatus.ISSUED,
+        currentAssignmentId: txId,
+        lastUpdated: currentMs
+      });
+
+      // 4. Update handover state document status to completed
+      await updateDoc(doc(handoversCol, ho.id), {
+        status: "completed",
+        completedAt: currentMs
+      });
+
+      alert(`Verification receipt success! Device ${ho.assetId} successfully assigned in your shift hand-held custody.`);
+      onRefresh();
+    } catch (err) {
+      console.error("Takeover receipt fails", err);
+      alert("Ledger transaction failed to update. Check operational connections.");
+    }
+  };
+
+  // Reject/Decline a handover request
+  const handleDeclineTakeover = async (ho: Handover) => {
+    try {
+      await updateDoc(doc(handoversCol, ho.id), {
+        status: "declined"
+      });
+      alert(`Declined direct checkout invitation of device ${ho.assetId}.`);
+      onRefresh();
+    } catch (err) {
+      console.error("Decline handover failure", err);
+    }
+  };
+
+  // Cancel an initiated handover request
+  const handleCancelHandover = async (hoId: string) => {
+    try {
+      await updateDoc(doc(handoversCol, hoId), {
+        status: "declined"
+      });
+      alert(`Handover transfer submission retracted/cancelled.`);
+      onRefresh();
+    } catch (err) {
+      console.error("Cancel handover failure", err);
+    }
   };
 
   // Fetch lists
@@ -428,7 +576,72 @@ export default function AgentPortal({
           </div>
 
           {deskTab === "operations" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-6">
+              {/* Takeovers Section */}
+              {(() => {
+                const pendingTakeovers = currentAgent
+                  ? handovers.filter(
+                      (ho) =>
+                        ho.toAgentId.toUpperCase() === currentAgent.id.toUpperCase() &&
+                        ho.status === "pending"
+                    )
+                  : [];
+                if (pendingTakeovers.length === 0) return null;
+                return (
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 shadow-xs animate-fadeIn">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="p-1 px-2.5 rounded-full bg-amber-100 text-amber-850 text-amber-800 text-[9px] font-bold uppercase tracking-wider">
+                        📬 Takeover Request Pending
+                      </div>
+                      <h4 className="font-bold text-xs text-amber-905 text-amber-900 uppercase tracking-wide flex items-center gap-1">
+                        <ArrowLeftRight className="w-3.5 h-3.5" />
+                        Device Transfer Receipt Action Required
+                      </h4>
+                    </div>
+                    <div className="space-y-3">
+                      {pendingTakeovers.map((ho) => (
+                        <div key={ho.id} className="bg-white border border-amber-105 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono text-[10px] font-bold uppercase bg-slate-100 border border-slate-200 text-slate-700 px-1.5 py-0.5 rounded">
+                                {ho.assetId}
+                              </span>
+                              <span className="font-bold text-slate-900 text-xs">{ho.assetName}</span>
+                              <span className="text-[10px] text-slate-500">({ho.assetType})</span>
+                            </div>
+                            <p className="text-xs text-slate-700 mt-2">
+                              Offered by: <strong className="text-indigo-900">{ho.fromAgentName}</strong> (<span className="font-mono">{ho.fromAgentId}</span>)
+                            </p>
+                            {ho.remarks && (
+                              <p className="text-[11px] text-indigo-700 bg-indigo-50/50 px-2 py-1 rounded inline-block mt-1 font-serif">
+                                💬 Note: "{ho.remarks}"
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+                            <button
+                              type="button"
+                              onClick={() => handleAcceptTakeover(ho)}
+                              className="flex-1 sm:flex-initial px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-2xs cursor-pointer transition-all active:scale-95 text-center"
+                            >
+                              Accept Takeover ✓
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeclineTakeover(ho)}
+                              className="flex-1 sm:flex-initial px-3 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold text-xs uppercase tracking-wider rounded-xl shadow-3xs cursor-pointer transition-all text-center"
+                            >
+                              Decline ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* SECTION: ASSIGNED ASSETS IN CUSTODY */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
                 <div>
@@ -479,27 +692,169 @@ export default function AgentPortal({
                               </div>
                             )}
 
-                            {/* Return action card container inside portal */}
-                            <div className="space-y-2 pt-2 border-t border-slate-100">
-                              <label className="block text-[10px] text-slate-500 font-medium">Optional state notes for supervisors:</label>
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  placeholder="e.g. Returned fully charged..."
-                                  id={`remarks-input-${device.id}`}
-                                  className="flex-1 px-2 py-1.5 border border-slate-200 bg-white rounded-lg text-[11px]"
-                                />
-                                <button
-                                  onClick={() => {
-                                    const inputEl = document.getElementById(`remarks-input-${device.id}`) as HTMLInputElement;
-                                    handleSelfReturn(device.id, inputEl ? inputEl.value : "");
-                                  }}
-                                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] shrink-0 transition-colors shadow-2xs cursor-pointer"
-                                >
-                                  Return cabinet roll-in ➔
-                                </button>
-                              </div>
-                            </div>
+                                     {/* Return action card container inside portal */}
+                             {(() => {
+                               const pendingHo = handovers.find(
+                                 (ho) =>
+                                   ho.assetId === device.id &&
+                                   ho.fromAgentId.toUpperCase() === currentAgent.id.toUpperCase() &&
+                                   ho.status === "pending"
+                               );
+
+                               return pendingHo ? (
+                                 <div className="mt-3 p-3 bg-indigo-50 border border-indigo-150 rounded-xl space-y-2.5 animate-fadeIn">
+                                   <p className="text-[11px] text-indigo-900 flex items-center gap-1.5 font-medium leading-relaxed">
+                                     <span className="w-2 h-2 bg-indigo-600 rounded-full animate-ping shrink-0" />
+                                     Transfer pending to <strong>{pendingHo.toAgentName}</strong> (<span className="font-mono text-[10px] uppercase font-bold">{pendingHo.toAgentId}</span>)
+                                   </p>
+                                   <button
+                                     onClick={() => handleCancelHandover(pendingHo.id)}
+                                     className="w-full py-1.5 border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 text-[10px] font-bold rounded-lg uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1"
+                                   >
+                                     Cancel Transfer Request ✕
+                                   </button>
+                                 </div>
+                               ) : (
+                                 /* Toggled switcher between return and physical hand-off forms */
+                                 <div className="space-y-2.5 pt-3 border-t border-slate-100">
+                                   <div className="flex justify-between items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
+                                     <button
+                                       type="button"
+                                       onClick={() => setActiveHandoverAssetId(null)}
+                                       className={`flex-1 text-center py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                                         activeHandoverAssetId !== device.id
+                                           ? "bg-white text-indigo-700 shadow-3xs border border-slate-200/50 font-extrabold"
+                                           : "text-slate-500 hover:text-slate-705"
+                                       }`}
+                                     >
+                                       Cabinet Return
+                                     </button>
+                                     <button
+                                       type="button"
+                                       onClick={() => {
+                                         setActiveHandoverAssetId(device.id);
+                                         setTargetAgentUId("");
+                                         setHandoverRemarks("");
+                                       }}
+                                       className={`flex-1 text-center py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                                         activeHandoverAssetId === device.id
+                                           ? "bg-white text-indigo-700 shadow-3xs border border-slate-200/50 font-extrabold"
+                                           : "text-slate-500 hover:text-slate-705"
+                                       }`}
+                                     >
+                                       Direct Handover
+                                     </button>
+                                   </div>
+
+                                   {activeHandoverAssetId !== device.id ? (
+                                     /* Cabinet Return Form Component */
+                                     <div className="space-y-1.5 animate-fadeIn">
+                                       <label className="block text-[10px] text-slate-500 font-medium">Optional state notes for supervisors:</label>
+                                       <div className="flex gap-2">
+                                         <input
+                                           type="text"
+                                           placeholder="e.g. Returned fully charged..."
+                                           id={`remarks-input-${device.id}`}
+                                           className="flex-1 px-2.5 py-1.5 border border-slate-200 bg-white rounded-lg text-[10.5px]"
+                                         />
+                                         <button
+                                           onClick={() => {
+                                             const inputEl = document.getElementById(`remarks-input-${device.id}`) as HTMLInputElement;
+                                             handleSelfReturn(device.id, inputEl ? inputEl.value : "");
+                                           }}
+                                           className="px-3.5 py-1.5 bg-indigo-600 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] shrink-0 transition-colors shadow-2xs cursor-pointer"
+                                         >
+                                           Return cabinet roll-in ➔
+                                         </button>
+                                       </div>
+                                     </div>
+                                   ) : (
+                                     /* Direct Handover Form Component */
+                                     <div className="space-y-3 bg-indigo-50/20 border border-indigo-100/40 p-3 rounded-xl animate-fadeIn">
+                                       <div className="space-y-1">
+                                         <label className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                                           Target Agent U ID / Employee ID:
+                                         </label>
+                                         <input
+                                           type="text"
+                                           placeholder="e.g. EMP001"
+                                           value={targetAgentUId}
+                                           onChange={(e) => setTargetAgentUId(e.target.value)}
+                                           className="w-full px-2.5 py-1.5 border border-slate-200 bg-white rounded-lg text-[11px] uppercase font-bold text-slate-800"
+                                         />
+                                         {(() => {
+                                           const lookupVal = targetAgentUId.trim().toUpperCase();
+                                           if (!lookupVal) return null;
+                                           
+                                           const matched = agents.find((ag) => ag.id.toUpperCase() === lookupVal);
+                                           if (matched) {
+                                             const isSelf = matched.id.toUpperCase() === currentAgent.id.toUpperCase();
+                                             if (isSelf) {
+                                               return (
+                                                 <p className="text-[10px] text-rose-600 font-bold leading-tight mt-1 animate-pulse">
+                                                   ⚠️ You cannot handover a device to yourself.
+                                                 </p>
+                                               );
+                                             }
+                                             return (
+                                               <p className="text-[10.5px] text-emerald-600 font-bold leading-tight mt-1 flex items-center gap-1">
+                                                 ✓ Found Agent: <strong className="text-slate-900">{matched.name}</strong> ({matched.department || "General Shift"})
+                                               </p>
+                                             );
+                                           } else if (lookupVal.length >= 3) {
+                                             return (
+                                               <p className="text-[10px] text-amber-600 font-bold leading-tight mt-1 animate-pulse">
+                                                 ⚠️ No registered agent found with ID "{lookupVal}"
+                                               </p>
+                                             );
+                                           }
+                                           return null;
+                                         })()}
+                                       </div>
+
+                                       <div className="space-y-1">
+                                         <label className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                                           Handover Comments / Notes:
+                                         </label>
+                                         <input
+                                           type="text"
+                                           placeholder="e.g. Handoff for next flight schedule..."
+                                           value={handoverRemarks}
+                                           onChange={(e) => setHandoverRemarks(e.target.value)}
+                                           className="w-full px-2.5 py-1.5 border border-slate-200 bg-white rounded-lg text-[10.5px]"
+                                         />
+                                       </div>
+
+                                       {(() => {
+                                         const lookupVal = targetAgentUId.trim().toUpperCase();
+                                         const matched = agents.find((ag) => ag.id.toUpperCase() === lookupVal);
+                                         const isSelf = matched?.id.toUpperCase() === currentAgent.id.toUpperCase();
+                                         const canSubmit = matched && !isSelf;
+
+                                         return (
+                                           <button
+                                             type="button"
+                                             disabled={!canSubmit || handoverSubmitting}
+                                             onClick={() => {
+                                               if (matched) {
+                                                 handleInitiateHandover(device.id, matched);
+                                               }
+                                             }}
+                                             className={`w-full py-2 font-bold text-[10.5px] uppercase tracking-wider rounded-lg transition-all shadow-3xs cursor-pointer ${
+                                               canSubmit
+                                                 ? "bg-[#071d49] hover:bg-[#0a2966] text-white active:scale-[0.98]"
+                                                 : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                                             }`}
+                                           >
+                                             {handoverSubmitting ? "Syncing Handover..." : "Initiate Direct Handover Receipt ➔"}
+                                           </button>
+                                         );
+                                       })()}
+                                     </div>
+                                   )}
+                                 </div>
+                               );
+                             })()}
                           </div>
                         );
                       })}
@@ -608,6 +963,7 @@ export default function AgentPortal({
                 )}
               </div>
             </div>
+          </div>
           ) : (
             /* Tab: My Personal Activity Log History */
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm overflow-x-auto">

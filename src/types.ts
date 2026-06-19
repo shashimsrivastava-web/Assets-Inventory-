@@ -62,3 +62,18 @@ export interface WebhookConfig {
   emailRecipient?: string;
   enabled: boolean;
 }
+
+export interface Handover {
+  id: string; // Document ID (usually same as assetId for single active pending handover per device)
+  assetId: string;
+  assetName: string;
+  assetType: string;
+  fromAgentId: string;
+  fromAgentName: string;
+  toAgentId: string;
+  toAgentName: string;
+  status: "pending" | "completed" | "declined";
+  timestamp: number;
+  remarks?: string;
+}
+

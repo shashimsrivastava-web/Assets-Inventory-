@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { onSnapshot, doc, getDocFromServer, query, orderBy, getDocs } from "firebase/firestore";
-import { db, assetsCol, agentsCol, transactionsCol } from "./firebase";
+import { db, assetsCol, agentsCol, transactionsCol, handoversCol } from "./firebase";
 import { bootstrapDatabaseIfEmpty } from "./utils/initDb";
-import { Asset, Agent, Transaction, AlertLog, WebhookConfig, AssetStatus } from "./types";
+import { Asset, Agent, Transaction, AlertLog, WebhookConfig, AssetStatus, Handover } from "./types";
 import { getRecommendedShiftByTime } from "./utils/shiftConfig";
 
 // Component imports
@@ -35,6 +35,7 @@ export default function App() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [handovers, setHandovers] = useState<Handover[]>([]);
   
   // App infrastructure states
   const [loading, setLoading] = useState(true);
@@ -136,10 +137,21 @@ export default function App() {
       console.warn("Transactions listener failed", error);
     });
 
+    const unsubHandovers = onSnapshot(handoversCol, (snapshot) => {
+      const list: Handover[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ ...doc.data() } as Handover);
+      });
+      setHandovers(list);
+    }, (error) => {
+      console.warn("Handovers listener failed", error);
+    });
+
     return () => {
       unsubAssets();
       unsubAgents();
       unsubTransactions();
+      unsubHandovers();
     };
   }, []);
 
@@ -278,6 +290,7 @@ export default function App() {
             assets={assets}
             agents={agents}
             transactions={transactions}
+            handovers={handovers}
             activeShift={activeShift}
             onRefresh={handleForceSync}
             onAddAlert={handleAddNewAlert}
