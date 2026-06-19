@@ -3,6 +3,7 @@ import { onSnapshot, doc, getDocFromServer, query, orderBy, getDocs } from "fire
 import { db, assetsCol, agentsCol, transactionsCol } from "./firebase";
 import { bootstrapDatabaseIfEmpty } from "./utils/initDb";
 import { Asset, Agent, Transaction, AlertLog, WebhookConfig, AssetStatus } from "./types";
+import { getRecommendedShiftByTime } from "./utils/shiftConfig";
 
 // Component imports
 import Header from "./components/Header";
@@ -13,6 +14,7 @@ import AgentMaster from "./components/AgentMaster";
 import AuditTrail from "./components/AuditTrail";
 import Reports from "./components/Reports";
 import AlertsManager from "./components/AlertsManager";
+import AgentPortal from "./components/AgentPortal";
 
 // Sidebar Navigation Icons
 import { LayoutDashboard, Key, Laptop, Users, History, BarChart3, Bell, Shield, Info, Database } from "lucide-react";
@@ -20,7 +22,8 @@ import { LayoutDashboard, Key, Laptop, Users, History, BarChart3, Bell, Shield, 
 export default function App() {
   const [role, setRole] = useState<"Admin" | "Supervisor">("Supervisor");
   const [activeTab, setActiveTab] = useState<"dashboard" | "handover" | "assets" | "agents" | "audit" | "reports" | "alerts">("dashboard");
-  const [activeShift, setActiveShift] = useState("Morning");
+  const [activeShift, setActiveShift] = useState(getRecommendedShiftByTime());
+  const [viewMode, setViewMode] = useState<"console" | "agent">("console");
 
   // Collections state
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -41,15 +44,35 @@ export default function App() {
 
   // Automatically compute shift based on current time (June 2026)
   useEffect(() => {
-    const currentHour = new Date().getHours();
-    if (currentHour >= 6 && currentHour < 14) {
-      setActiveShift("Morning");
-    } else if (currentHour >= 14 && currentHour < 22) {
-      setActiveShift("Afternoon");
-    } else {
-      setActiveShift("Night");
-    }
+    setActiveShift(getRecommendedShiftByTime());
   }, []);
+
+  // Dynamic separate link hash routing for Agent Portal
+  useEffect(() => {
+    const handleUrlChecks = () => {
+      const isAgentHash = window.location.hash === "#agent-portal" || window.location.search.includes("portal=agent");
+      if (isAgentHash) {
+        setViewMode("agent");
+      } else {
+        setViewMode("console");
+      }
+    };
+    
+    handleUrlChecks();
+    window.addEventListener("hashchange", handleUrlChecks);
+    return () => window.removeEventListener("hashchange", handleUrlChecks);
+  }, []);
+
+  const handleSwitchToAgentPortal = () => {
+    window.location.hash = "#agent-portal";
+    setViewMode("agent");
+  };
+
+  const handleExitAgentPortal = () => {
+    // Clear hash cleanly
+    window.history.pushState("", document.title, window.location.pathname + window.location.search);
+    setViewMode("console");
+  };
 
   // Check database connectivity as strictly requested in Firebase instructions
   useEffect(() => {
@@ -210,11 +233,24 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Upper header */}
-      <Header role={role} setRole={setRole} activeShift={activeShift} />
+      <Header role={role} setRole={setRole} activeShift={activeShift} isAgentPortal={viewMode === "agent"} onChangeShift={setActiveShift} />
 
-      {/* Main dashboard body */}
-      <div className="flex-1 flex flex-col md:flex-row">
-        {/* Left Drawer / Nav Rails */}
+      {viewMode === "agent" ? (
+        <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-5xl mx-auto w-full animate-fadeIn">
+          <AgentPortal
+            assets={assets}
+            agents={agents}
+            transactions={transactions}
+            activeShift={activeShift}
+            onRefresh={handleForceSync}
+            onAddAlert={handleAddNewAlert}
+            onExitPortal={handleExitAgentPortal}
+          />
+        </main>
+      ) : (
+        /* Main dashboard body */
+        <div className="flex-1 flex flex-col md:flex-row">
+          {/* Left Drawer / Nav Rails */}
         <aside className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 text-slate-600 py-6 px-4 shrink-0 flex flex-col justify-between">
           <nav className="space-y-1.5">
             <span className="px-3 text-[10px] uppercase font-bold text-slate-450 tracking-wider block mb-3 font-sans">Live Ops Console</span>
@@ -313,6 +349,28 @@ export default function App() {
           </nav>
 
           <div className="space-y-3 pt-6 border-t border-slate-100">
+            {/* Agent Desk Portal separate link */}
+            <div className="bg-indigo-50/50 border border-indigo-150 border-indigo-100 rounded-xl p-3 text-[11px] space-y-2">
+              <div className="flex items-center gap-1.5 font-bold text-indigo-900 uppercase tracking-tight text-[10px] font-sans">
+                <Key className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Agent Desk Gateway</span>
+              </div>
+              <p className="text-slate-500 text-[10px] leading-relaxed">
+                Dedicated desk link for roster agents to self-issue and rollback custody devices.
+              </p>
+              <a
+                href="#agent-portal"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleSwitchToAgentPortal();
+                }}
+                className="w-full flex items-center justify-center gap-1 py-1.5 border border-indigo-200 hover:border-indigo-350 bg-white hover:bg-slate-50 text-indigo-700 text-[10.5px] font-bold rounded-lg shadow-2xs transition-colors cursor-pointer"
+                id="link-agent-portal"
+              >
+                Access Desk Portal ➔
+              </a>
+            </div>
+
             {/* Database verification badges */}
             <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-[10px] text-slate-500 space-y-2">
               <div className="flex items-center gap-2">
@@ -411,6 +469,7 @@ export default function App() {
           )}
         </main>
       </div>
+      )}
     </div>
   );
 }

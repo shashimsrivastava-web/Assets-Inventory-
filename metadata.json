@@ -1,5 +1,5 @@
 {
-  "name": "Asset Management System",
+  "name": "Lufthansa Group DELSM Electronics Devices Inventory Log",
   "description": "An Asset Issue and Return Management System for tracking iPads, Ingenico payment devices, and mobile phones during shifts, with a live dashboard, audit trails, and reporting.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": [

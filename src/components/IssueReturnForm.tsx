@@ -3,6 +3,7 @@ import { Asset, Agent, Transaction, AssetStatus } from "../types";
 import { ArrowUpRight, ArrowDownLeft, Calendar, FileText, Clock, HelpCircle, CheckCircle, AlertTriangle, Play, Smartphone, BookOpen, Camera, Search, User, Clipboard, Sliders } from "lucide-react";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { db, assetsCol, transactionsCol } from "../firebase";
+import { HOURLY_SHIFTS } from "../utils/shiftConfig";
 
 interface IssueReturnFormProps {
   assets: Asset[];
@@ -315,9 +316,11 @@ export default function IssueReturnForm({ assets, agents, role, activeShift, onR
                     onChange={(e) => setIssueShift(e.target.value)}
                     className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500/50 transition-all font-medium text-slate-700 cursor-pointer"
                   >
-                    <option value="Morning">Morning (06:00 - 14:00)</option>
-                    <option value="Afternoon">Afternoon (14:00 - 22:00)</option>
-                    <option value="Night">Night (22:00 - 06:00)</option>
+                    {HOURLY_SHIFTS.map((shift) => (
+                      <option key={shift.value} value={shift.value}>
+                        {shift.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
