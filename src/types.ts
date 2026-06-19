@@ -12,7 +12,6 @@ export interface Asset {
   id: string; // Asset ID (e.g., AST-001)
   type: "iPad" | "Ingenico" | "Mobile Phone" | string;
   name: string; // Device Name/Number (e.g., iPad Pro 1)
-  serialNumber?: string;
   status: AssetStatus;
   currentAssignmentId?: string | null;
   imageUrl?: string;

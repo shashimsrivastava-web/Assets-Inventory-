@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Agent } from "../types";
-import { Plus, Edit2, Trash2, Users, Search, RefreshCw, Briefcase, UserPlus } from "lucide-react";
+import { Plus, Edit2, Trash2, Users, Search, RefreshCw, Briefcase, UserPlus, UploadCloud, FileSpreadsheet } from "lucide-react";
 import { addDoc, deleteDoc, doc, setDoc } from "firebase/firestore";
 import { agentsCol } from "../firebase";
 
@@ -23,6 +23,13 @@ export default function AgentMaster({ agents, role, loading, onRefresh }: AgentM
   const [name, setName] = useState("");
   const [department, setDepartment] = useState("");
 
+  // CSV Upload states
+  const [isCsvOpen, setIsCsvOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [parsedAgents, setParsedAgents] = useState<Agent[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+  const [isCsvImporting, setIsCsvImporting] = useState(false);
+
   const resetForm = () => {
     setEmployeeId("");
     setName("");
@@ -32,7 +39,160 @@ export default function AgentMaster({ agents, role, loading, onRefresh }: AgentM
 
   const handleOpenCreateForm = () => {
     resetForm();
+    setIsCsvOpen(false); // Close CSV panel if opening form
     setIsFormOpen(true);
+  };
+
+  // Drag-and-drop CSV handlers
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.name.endsWith(".csv") || file.type === "text/csv") {
+        processCsvFile(file);
+      } else {
+        alert("Please upload a valid CSV (.csv) file.");
+      }
+    }
+  };
+
+  const handleFileSelectChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      processCsvFile(e.target.files[0]);
+    }
+  };
+
+  const processCsvFile = (file: File) => {
+    setCsvFile(file);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        if (!text) {
+          alert("The uploaded file is empty.");
+          return;
+        }
+
+        const lines = text.split(/\r?\n/);
+        const results: Agent[] = [];
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          // Simple CSV line parse respecting quote encapsulation
+          let parts: string[] = [];
+          if (line.includes('"')) {
+            let currentPart = "";
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+              const c = line[i];
+              if (c === '"') {
+                inQuotes = !inQuotes;
+              } else if (c === ',' && !inQuotes) {
+                parts.push(currentPart);
+                currentPart = "";
+              } else {
+                currentPart += c;
+              }
+            }
+            parts.push(currentPart);
+          } else {
+            parts = line.split(',');
+          }
+
+          if (parts.length < 2) continue;
+
+          const empId = parts[0].trim().toUpperCase();
+          const agentName = parts[1].trim();
+
+          // Skip empty rows or potential CSV column header labels
+          if (!empId || !agentName) continue;
+          if (
+            empId === "ID" ||
+            empId === "EMPLOYEE ID" ||
+            empId === "EMPLOYEE_ID" ||
+            empId === "U NUMBER" ||
+            empId === "UNUMBER" ||
+            empId === "EMPLOYEEID" ||
+            empId === "U-NUMBER" ||
+            (empId.toLowerCase() === "id" && agentName.toLowerCase() === "name")
+          ) {
+            continue;
+          }
+
+          // Determine department: default to "DELSM" as requested by user
+          let dept = parts[2] ? parts[2].trim() : "";
+          if (!dept) {
+            dept = "DELSM";
+          }
+
+          results.push({
+            id: empId,
+            name: agentName,
+            department: dept,
+            lastActivity: Date.now()
+          });
+        }
+
+        if (results.length === 0) {
+          alert("No valid agent records found in the CSV. Form format is Expected: ID, Name, Department (optional).");
+          setCsvFile(null);
+          setParsedAgents([]);
+        } else {
+          setParsedAgents(results);
+        }
+      } catch (err) {
+        console.error("Error parsing CSV:", err);
+        alert("An error occurred while reading the CSV content.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCommitCsvImport = async () => {
+    if (parsedAgents.length === 0) return;
+    setIsCsvImporting(true);
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    try {
+      for (const agent of parsedAgents) {
+        try {
+          await setDoc(doc(agentsCol, agent.id), agent);
+          successCount++;
+        } catch (err) {
+          console.error(`Failed to record agent: ${agent.id}`, err);
+          failureCount++;
+        }
+      }
+
+      alert(`Roster update completed successfully!\n\nAuthorized Agents registered: ${successCount}\nFailed: ${failureCount}`);
+
+      // Reset and refresh database state
+      setCsvFile(null);
+      setParsedAgents([]);
+      setIsCsvOpen(false);
+      onRefresh();
+    } catch (globalErr) {
+      console.error("Bulk upload transaction crash:", globalErr);
+      alert("Failed during bulk upload execution. Please try again.");
+    } finally {
+      setIsCsvImporting(false);
+    }
   };
 
   const handleEdit = (agent: Agent) => {
@@ -132,8 +292,179 @@ export default function AgentMaster({ agents, role, loading, onRefresh }: AgentM
             <UserPlus className="w-4 h-4" />
             Enroll New Agent
           </button>
+          {role === "Admin" && (
+            <button
+              id="bulk-csv-upload-button"
+              onClick={() => {
+                setIsCsvOpen(!isCsvOpen);
+                setIsFormOpen(false); // Close individual enroll form
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-indigo-500 text-slate-700 bg-white hover:bg-indigo-50/10 font-semibold rounded-xl text-xs tracking-wide shadow-sm transition-all cursor-pointer animate-fadeIn"
+            >
+              <UploadCloud className="w-4 h-4 text-indigo-500" />
+              Upload CSV Roster
+            </button>
+          )}
         </div>
       </div>
+
+      {role === "Admin" && isCsvOpen && (
+        <div id="csv-import-panel" className="mb-6 p-5 border border-dashed border-slate-250 bg-slate-50/40 rounded-2xl animate-fadeIn">
+          <div className="flex justify-between items-center mb-3">
+            <div>
+              <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                <FileSpreadsheet className="w-4.5 h-4.5 text-indigo-505 shrink-0" />
+                Bulk Import Authorized Agents from CSV
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                Upload shift-compliant personnel data from a spreadsheet roster file.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setIsCsvOpen(false);
+                setCsvFile(null);
+                setParsedAgents([]);
+              }}
+              className="text-xs text-slate-400 hover:text-slate-650 cursor-pointer font-medium font-sans border border-slate-200 px-2.5 py-1 rounded-lg bg-white"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-4">
+            <div className="lg:col-span-5 space-y-3">
+              <div className="bg-white border border-slate-150 rounded-xl p-4 text-xs text-slate-650 leading-relaxed space-y-2">
+                <div className="font-bold text-slate-800 uppercase tracking-widest text-[9.5px]">
+                  📋 Required CSV Columns
+                </div>
+                <div className="flex items-start gap-1">
+                  <span className="font-bold text-indigo-650">Column 1:</span>
+                  <span><strong>Employee ID / U-Number</strong> (e.g. U1051, EMP002)</span>
+                </div>
+                <div className="flex items-start gap-1">
+                  <span className="font-bold text-indigo-650">Column 2:</span>
+                  <span><strong>Full Name</strong></span>
+                </div>
+                <div className="flex items-start gap-1">
+                  <span className="font-bold text-indigo-650">Column 3:</span>
+                  <span><strong>Department/Team</strong> (Optional. If omitted or blank, defaults to <strong className="text-amber-700 font-bold bg-amber-50 px-1 border border-amber-100/60 rounded">DELSM</strong>)</span>
+                </div>
+                <div className="pt-2 border-t border-slate-100 text-slate-400 font-mono text-[9px] flex gap-1 justify-between">
+                  <span>Sample:</span>
+                  <span className="text-slate-500">U582103, Michael Scott, DELSM</span>
+                </div>
+              </div>
+
+              {/* Drag and Drop Zone */}
+              <div
+                className={`border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer relative ${
+                  dragActive
+                    ? "border-indigo-550 bg-indigo-50/30"
+                    : "border-slate-250 hover:border-indigo-500 hover:bg-slate-50/10"
+                }`}
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => document.getElementById("csv-file-input")?.click()}
+              >
+                <input
+                  type="file"
+                  id="csv-file-input"
+                  className="hidden"
+                  accept=".csv,text/csv"
+                  onChange={handleFileSelectChange}
+                />
+                
+                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mx-auto mb-2.5 border border-indigo-100">
+                  <UploadCloud className="w-5 h-5 shrink-0" />
+                </div>
+                <p className="text-xs font-bold text-slate-800">
+                  {csvFile ? csvFile.name : "Choose roster file or Drag & Drop"}
+                </p>
+                <p className="text-[10.5px] text-slate-400 mt-1">
+                  {csvFile 
+                    ? `Size: ${(csvFile.size / 1024).toFixed(1)} KB` 
+                    : "Supports standard comma-separated text files (.csv)"
+                  }
+                </p>
+              </div>
+            </div>
+
+            <div className="lg:col-span-7 flex flex-col justify-between border border-slate-150 rounded-xl bg-white p-4">
+              <div>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-3">
+                  <span className="text-[11.5px] font-bold text-slate-700 uppercase tracking-wider">
+                    Upload Roster Preview ({parsedAgents.length} agents detected)
+                  </span>
+                  {parsedAgents.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setCsvFile(null);
+                        setParsedAgents([]);
+                      }}
+                      className="text-[10px] text-rose-500 hover:underline font-bold tracking-wider uppercase cursor-pointer"
+                    >
+                      Reset Preview
+                    </button>
+                  )}
+                </div>
+
+                <div className="overflow-y-auto max-h-[170px] text-xs space-y-1.5 pr-1 divide-y divide-slate-100">
+                  {parsedAgents.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 font-medium italic">
+                      No records loaded. Select or drag a valid CSV file to preview.
+                    </div>
+                  ) : (
+                    parsedAgents.map((ag, idx) => (
+                      <div key={idx} className="pt-2 first:pt-0 flex items-center justify-between text-[11px] text-slate-700">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono font-bold text-indigo-700 w-16">{ag.id}</span>
+                          <span className="font-semibold text-slate-800">{ag.name}</span>
+                        </div>
+                        <div>
+                          {ag.department === "DELSM" ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[9px] font-bold uppercase tracking-wider">
+                              DELSM (Default)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-650 text-[9px] font-bold uppercase tracking-wider">
+                              {ag.department}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <span className="text-[10px] text-slate-400 font-semibold leading-normal max-w-sm">
+                  {parsedAgents.length > 0 
+                    ? "Carefully audit the parsed results. Existing registered IDs will have their specs updated." 
+                    : "No file loaded. Ready to receive roster CSV records."
+                  }
+                </span>
+
+                <button
+                  type="button"
+                  disabled={parsedAgents.length === 0 || isCsvImporting}
+                  onClick={handleCommitCsvImport}
+                  className={`px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition uppercase tracking-wider cursor-pointer text-center ${
+                    parsedAgents.length > 0 && !isCsvImporting
+                      ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                      : "bg-slate-100 text-slate-450 cursor-not-allowed border border-slate-200"
+                  }`}
+                >
+                  {isCsvImporting ? "Importing..." : `Authorize Roster ✅`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isFormOpen && (
         <div className="mb-6 p-5 border border-slate-200 bg-slate-50/40 rounded-2xl animate-fadeIn">

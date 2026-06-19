@@ -24,7 +24,6 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
     const matchesText =
       device.id.toLowerCase().includes(term) ||
       device.name.toLowerCase().includes(term) ||
-      (device.serialNumber || "").toLowerCase().includes(term) ||
       (activeAss && (
         activeAss.agentName.toLowerCase().includes(term) ||
         activeAss.employeeId.toLowerCase().includes(term)
@@ -90,8 +89,8 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
       alert("No resources available to export.");
       return;
     }
-    const headers = ["Asset ID", "Type", "Device Name", "Serial Number", "Status"];
-    const rows = list.map(a => [a.id, a.type, `"${a.name}"`, a.serialNumber || "N/A", a.status]);
+    const headers = ["Asset ID", "Type", "Device Name", "Status"];
+    const rows = list.map(a => [a.id, a.type, `"${a.name}"`, a.status]);
     const csvContent = "data:text/csv;charset=utf-8," 
       + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
     const link = document.createElement("a");
@@ -311,7 +310,7 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
                           </span>
                           <strong className="text-xs font-semibold text-slate-900">{device.name}</strong>
                         </div>
-                        <span className="text-[10px] text-slate-450 block mt-1.5">{device.type} · SN: <span className="font-mono">{device.serialNumber || "None"}</span></span>
+                        <span className="text-[10px] text-slate-450 block mt-1.5">{device.type}</span>
                       </div>
                     </div>
 
@@ -420,7 +419,7 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
                           </span>
                           <strong className="text-xs font-semibold text-slate-900">{device.name}</strong>
                         </div>
-                        <span className="text-[10px] text-slate-450 block mt-1.5">{device.type} · SN: <span className="font-mono">{device.serialNumber || "None"}</span></span>
+                        <span className="text-[10px] text-slate-450 block mt-1.5">{device.type}</span>
                       </div>
                     </div>
 

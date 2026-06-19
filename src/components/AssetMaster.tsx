@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { Asset, AssetStatus } from "../types";
-import { Plus, Edit2, Trash2, Smartphone, Tablet, CreditCard, Layers, Tag, Eye, RefreshCw, Printer } from "lucide-react";
+import { Plus, Edit2, Trash2, Smartphone, Tablet, CreditCard, Layers, Tag, Eye, RefreshCw, Printer, UploadCloud, FileSpreadsheet } from "lucide-react";
 import { addDoc, deleteDoc, doc, setDoc } from "firebase/firestore";
 import { assetsCol } from "../firebase";
+import { read, utils } from "xlsx";
 
 interface AssetMasterProps {
   assets: Asset[];
@@ -29,17 +30,22 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
   const [type, setType] = useState("iPad");
   const [customType, setCustomType] = useState("");
   const [name, setName] = useState("");
-  const [serialNumber, setSerialNumber] = useState("");
   const [status, setStatus] = useState<AssetStatus>(AssetStatus.IN_OFFICE);
   const [imageUrl, setImageUrl] = useState("");
   const [showQr, setShowQr] = useState<string | null>(null);
+
+  // Excel Sheet upload states
+  const [isExcelOpen, setIsExcelOpen] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [parsedAssets, setParsedAssets] = useState<Asset[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+  const [isExcelImporting, setIsExcelImporting] = useState(false);
 
   const resetForm = () => {
     setAssetId("");
     setType("iPad");
     setCustomType("");
     setName("");
-    setSerialNumber("");
     setStatus(AssetStatus.IN_OFFICE);
     setImageUrl(PRESET_IMAGES[0].url);
     setEditingAsset(null);
@@ -47,7 +53,151 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
 
   const handleOpenCreateForm = () => {
     resetForm();
+    setIsExcelOpen(false); // Close the excel panel if opening regular form
     setIsFormOpen(true);
+  };
+
+  // Case-insensitive, space-flexible header key-value lookup helper
+  const findValueByHeader = (row: any, targetHeaders: string[]): string => {
+    const rowKeys = Object.keys(row);
+    for (const h of targetHeaders) {
+      const cleanTarget = h.trim().replace(/\s+/g, "").toLowerCase();
+      const matchedKey = rowKeys.find(
+        (k) => k.trim().replace(/\s+/g, "").toLowerCase() === cleanTarget
+      );
+      if (matchedKey !== undefined) {
+        return String(row[matchedKey] || "").trim();
+      }
+    }
+    return "";
+  };
+
+  // Process Excel binary sheet
+  const processExcelFile = (file: File) => {
+    setExcelFile(file);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = read(data, { type: "array" });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to rows of objects mapping Column Header -> Value
+        const rawRows = utils.sheet_to_json<any>(worksheet);
+        const results: Asset[] = [];
+
+        for (const row of rawRows) {
+          // 1. Asset ID from column "ID"
+          const assetIdVal = findValueByHeader(row, ["ID", "Asset ID", "Asset_ID", "AssetID"]);
+          
+          if (!assetIdVal) continue; // Skip empty/header rows
+
+          // 2. Device Type from "Asset Type"
+          let deviceType = findValueByHeader(row, ["Asset Type", "Device Type", "Type", "AssetType", "DeviceType"]);
+          if (!deviceType) {
+            deviceType = "Other"; // Default fallback
+          }
+
+          // 3. Device Friendly Name from Location, Brand Details, and Usage Location combined
+          const location = findValueByHeader(row, ["Location", "Loc", "Location Key"]);
+          const brand = findValueByHeader(row, ["Brand Details", "Brand", "Brand_Details", "BrandDetails"]);
+          const usage = findValueByHeader(row, ["Usage Location", "Usage_Location", "UsageLocation", "Usage Key"]);
+
+          // Build combined friendly name safely skipping empty parts
+          const nameParts = [brand, location, usage].filter(val => val !== "");
+          const combinedName = nameParts.join(" - ") || `Asset ${assetIdVal}`;
+
+          // Clean ID representation: letters or numbers, uppercase
+          const cleanedId = assetIdVal.toUpperCase().trim().replace(/\s+/g, "-");
+
+          results.push({
+            id: cleanedId,
+            type: deviceType,
+            name: combinedName,
+            status: AssetStatus.IN_OFFICE, // Under active available custody inside office
+            imageUrl: PRESET_IMAGES[0].url,
+            lastUpdated: Date.now()
+          });
+        }
+
+        if (results.length === 0) {
+          alert("No valid rows matching ID found. Please inspect the headers in your uploaded spreadsheet.");
+          setExcelFile(null);
+          setParsedAssets([]);
+        } else {
+          setParsedAssets(results);
+        }
+      } catch (err) {
+        console.error("Error reading spreadsheet layout:", err);
+        alert("Could not successfully parse this spreadsheet file.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      const nameLower = file.name.toLowerCase();
+      if (nameLower.endsWith(".xlsx") || nameLower.endsWith(".xls") || nameLower.endsWith(".csv") || file.type === "text/csv") {
+        processExcelFile(file);
+      } else {
+        alert("Please drop a valid Excel file (.xlsx, .xls) or comma-separated CSV file.");
+      }
+    }
+  };
+
+  const handleFileSelectChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      processExcelFile(e.target.files[0]);
+    }
+  };
+
+  const handleCommitExcelImport = async () => {
+    if (parsedAssets.length === 0) return;
+    setIsExcelImporting(true);
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    try {
+      for (const asset of parsedAssets) {
+        try {
+          await setDoc(doc(assetsCol, asset.id), asset);
+          successCount++;
+        } catch (err) {
+          console.error(`Failed to register asset ${asset.id}:`, err);
+          failureCount++;
+        }
+      }
+
+      alert(`Excel master inventory import finished!\n\nRegistered devices: ${successCount}\nFailed: ${failureCount}`);
+      
+      setExcelFile(null);
+      setParsedAssets([]);
+      setIsExcelOpen(false);
+      onRefresh();
+    } catch (globalErr) {
+      console.error("Bulk database insert failed:", globalErr);
+      alert("Encountered a database issue compiling bulk imports.");
+    } finally {
+      setIsExcelImporting(false);
+    }
   };
 
   const handleEdit = (asset: Asset) => {
@@ -61,7 +211,6 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
       setCustomType(asset.type);
     }
     setName(asset.name);
-    setSerialNumber(asset.serialNumber || "");
     setStatus(asset.status);
     setImageUrl(asset.imageUrl || PRESET_IMAGES[0].url);
     setIsFormOpen(true);
@@ -92,7 +241,6 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
       id: cleanedAssetId,
       type: finalType,
       name,
-      serialNumber,
       status,
       imageUrl: imageUrl || PRESET_IMAGES[0].url,
       currentAssignmentId: editingAsset ? editingAsset.currentAssignmentId : null,
@@ -188,6 +336,19 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </button>
+          {role === "Admin" && (
+            <button
+              id="bulk-excel-upload-button"
+              onClick={() => {
+                setIsExcelOpen(!isExcelOpen);
+                setIsFormOpen(false); // Close individual form if toggled
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-indigo-500 text-slate-705 bg-white hover:bg-indigo-50/10 font-semibold rounded-xl text-xs tracking-wide shadow-sm transition-all cursor-pointer animate-fadeIn"
+            >
+              <UploadCloud className="w-4 h-4 text-emerald-500" />
+              Upload Excel Inventory
+            </button>
+          )}
           <button
             id="register-asset-button"
             onClick={handleOpenCreateForm}
@@ -198,6 +359,155 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
           </button>
         </div>
       </div>
+
+      {role === "Admin" && isExcelOpen && (
+        <div id="excel-import-panel" className="mb-6 p-5 border border-dashed border-slate-250 bg-slate-50/40 rounded-2xl animate-fadeIn">
+          <div className="flex justify-between items-center mb-3">
+            <div>
+              <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                <FileSpreadsheet className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
+                Bulk Import Assets from Excel / CSV Sheet
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                Upload inventory items from a spreadsheet book or standard comma-separated text file (.xlsx, .xls, .csv).
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setIsExcelOpen(false);
+                setExcelFile(null);
+                setParsedAssets([]);
+              }}
+              className="text-xs text-slate-400 hover:text-slate-650 cursor-pointer font-medium font-sans border border-slate-200 px-2.5 py-1 rounded-lg bg-white"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-4">
+            <div className="lg:col-span-5 space-y-3">
+              <div className="bg-white border border-slate-150 rounded-xl p-4 text-xs text-slate-650 leading-relaxed space-y-2">
+                <div className="font-bold text-slate-800 uppercase tracking-widest text-[9.5px]">
+                  📋 Expected Columns Mapping
+                </div>
+                <div className="flex items-start gap-1">
+                  <span className="font-bold text-indigo-650">Column `ID`:</span>
+                  <span>Used as the unique <strong>Asset ID</strong> (e.g. AST-008)</span>
+                </div>
+                <div className="flex items-start gap-1">
+                  <span className="font-bold text-indigo-650">Column `Asset Type`:</span>
+                  <span>Used as the <strong>Device Type</strong> (e.g. iPad, Ingenico, Mobile Phone)</span>
+                </div>
+                <div className="flex items-start gap-1 flex-wrap">
+                  <span className="font-bold text-indigo-650">Device Friendly Name:</span>
+                  <span>Formed by joining columns <strong>`Brand Details`</strong>, <strong>`Location`</strong>, and <strong>`Usage Location`</strong>.</span>
+                </div>
+                <div className="pt-2 border-t border-slate-100 text-slate-400 font-mono text-[9px]">
+                  Note: Headers are parsed flexibly and case-independently.
+                </div>
+              </div>
+
+              {/* Drag and Drop Zone */}
+              <div
+                className={`border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer relative ${
+                  dragActive
+                    ? "border-emerald-550 bg-emerald-50/10"
+                    : "border-slate-250 hover:border-emerald-500 hover:bg-slate-50/10"
+                }`}
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => document.getElementById("excel-file-input")?.click()}
+              >
+                <input
+                  type="file"
+                  id="excel-file-input"
+                  className="hidden"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleFileSelectChange}
+                />
+                
+                <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mx-auto mb-2.5 border border-emerald-100">
+                  <UploadCloud className="w-5 h-5 shrink-0" />
+                </div>
+                <p className="text-xs font-bold text-slate-800">
+                  {excelFile ? excelFile.name : "Choose sheet or Drag & Drop"}
+                </p>
+                <p className="text-[10.5px] text-slate-400 mt-1">
+                  {excelFile 
+                    ? `Size: ${(excelFile.size / 1024).toFixed(1)} KB` 
+                    : "Supports spreadsheet books (.xlsx, .xls) and CSV data tables"
+                  }
+                </p>
+              </div>
+            </div>
+
+            <div className="lg:col-span-7 flex flex-col justify-between border border-slate-150 rounded-xl bg-white p-4">
+              <div>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-3">
+                  <span className="text-[11.5px] font-bold text-slate-700 uppercase tracking-wider">
+                    Spreadsheet Preview ({parsedAssets.length} devices detected)
+                  </span>
+                  {parsedAssets.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setExcelFile(null);
+                        setParsedAssets([]);
+                      }}
+                      className="text-[10px] text-rose-500 hover:underline font-bold tracking-wider uppercase cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                <div className="overflow-y-auto max-h-[170px] text-xs space-y-1.5 pr-1 divide-y divide-slate-100">
+                  {parsedAssets.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 font-medium italic">
+                      No resources loaded. Select or drag a spreadsheet to preview.
+                    </div>
+                  ) : (
+                    parsedAssets.map((as, idx) => (
+                      <div key={idx} className="pt-2 first:pt-0 flex items-center justify-between text-[11px] text-slate-700">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono font-bold text-emerald-650 w-20">{as.id}</span>
+                          <span className="font-semibold text-slate-800 truncate max-w-[240px]">{as.name}</span>
+                        </div>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-650 text-[9px] font-bold uppercase tracking-wider">
+                          {as.type}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <span className="text-[10px] text-slate-400 font-semibold leading-normal max-w-sm">
+                  {parsedAssets.length > 0 
+                    ? "Existing records sharing equivalent IDs will be updated. Check friendly names combination carefully." 
+                    : "Upload workbook. Once ready, click import below."
+                  }
+                </span>
+
+                <button
+                  type="button"
+                  disabled={parsedAssets.length === 0 || isExcelImporting}
+                  onClick={handleCommitExcelImport}
+                  className={`px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition uppercase tracking-wider cursor-pointer text-center ${
+                    parsedAssets.length > 0 && !isExcelImporting
+                      ? "bg-emerald-600 text-white hover:bg-emerald-750"
+                      : "bg-slate-100 text-slate-450 cursor-not-allowed border border-slate-200"
+                  }`}
+                >
+                  {isExcelImporting ? "Importing..." : "Commit Import ✅"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isFormOpen && (
         <div className="mb-6 p-5 border border-slate-200 bg-slate-50/40 rounded-2xl animate-fadeIn">
@@ -258,16 +568,7 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-650 mb-1.5">Serial Number (optional)</label>
-              <input
-                type="text"
-                value={serialNumber}
-                onChange={(e) => setSerialNumber(e.target.value)}
-                placeholder="SN-XXXXX"
-                className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-sm font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500/50 transition-all text-slate-800"
-              />
-            </div>
+
 
             <div>
               <label className="block text-xs font-semibold text-slate-650 mb-1.5">Physical Status</label>
@@ -382,10 +683,7 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
                   </div>
 
                   <h4 className="font-bold text-slate-900 text-sm mt-2 line-clamp-1">{asset.name}</h4>
-                  <p className="text-[11px] text-slate-550 mt-1 flex items-center gap-1">
-                    <span className="font-semibold text-slate-400">SN:</span>
-                    <span className="font-mono text-slate-600">{asset.serialNumber || "None"}</span>
-                  </p>
+
                 </div>
               </div>
 
