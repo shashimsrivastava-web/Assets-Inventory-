@@ -1,0 +1,8 @@
+{
+  "name": "Asset Management System",
+  "description": "An Asset Issue and Return Management System for tracking iPads, Ingenico payment devices, and mobile phones during shifts, with a live dashboard, audit trails, and reporting.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

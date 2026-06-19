@@ -1,0 +1,163 @@
+{
+  "entities": {
+    "Asset": {
+      "title": "Asset",
+      "description": "An asset that can be issued to agents, such as iPads, Ingenico payment devices, and mobile phones.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the asset (e.g. AST-001)"
+        },
+        "type": {
+          "type": "string",
+          "description": "Type of the device",
+          "enum": ["iPad", "Ingenico", "Mobile Phone"]
+        },
+        "name": {
+          "type": "string",
+          "description": "Device Name or Number (e.g., iPad Pro 1)"
+        },
+        "serialNumber": {
+          "type": "string",
+          "description": "Optional serial number"
+        },
+        "status": {
+          "type": "string",
+          "description": "Current status of the asset",
+          "enum": ["In Office", "Issued", "Returned", "Missing / Not Returned", "Not Taken"]
+        },
+        "currentAssignmentId": {
+          "type": "string",
+          "description": "ID of the current active transaction, or empty/null if in office"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Optional asset image URL"
+        }
+      },
+      "required": ["id", "type", "name", "status"]
+    },
+    "Agent": {
+      "title": "Agent",
+      "description": "An agent who can be issued assets.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Employee ID (e.g. EMP001)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the agent"
+        },
+        "department": {
+          "type": "string",
+          "description": "Optional department or team name"
+        }
+      },
+      "required": ["id", "name"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "An audit log record of an asset issue and return event.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique auto-generated identifier of the transaction"
+        },
+        "assetId": {
+          "type": "string",
+          "description": "The ID of the asset"
+        },
+        "assetName": {
+          "type": "string",
+          "description": "The name of the asset"
+        },
+        "assetType": {
+          "type": "string",
+          "description": "The type of the asset"
+        },
+        "employeeId": {
+          "type": "string",
+          "description": "The employee ID of the issuing agent"
+        },
+        "agentName": {
+          "type": "string",
+          "description": "The name of the issuing agent"
+        },
+        "department": {
+          "type": "string",
+          "description": "Department of the agent"
+        },
+        "issueDate": {
+          "type": "string",
+          "description": "Date of issue (YYYY-MM-DD)"
+        },
+        "issueTime": {
+          "type": "string",
+          "description": "Time of issue (HH:MM)"
+        },
+        "issueTimestamp": {
+          "type": "number",
+          "description": "Epoch millisecond when asset was issued"
+        },
+        "shift": {
+          "type": "string",
+          "description": "The shift description (e.g. Morning, Afternoon, Night)"
+        },
+        "issueRemarks": {
+          "type": "string",
+          "description": "Remarks added during issue"
+        },
+        "returnDate": {
+          "type": "string",
+          "description": "Date of return (YYYY-MM-DD)"
+        },
+        "returnTime": {
+          "type": "string",
+          "description": "Time of return (HH:MM)"
+        },
+        "returnTimestamp": {
+          "type": "number",
+          "description": "Epoch millisecond when asset was returned"
+        },
+        "returnRemarks": {
+          "type": "string",
+          "description": "Remarks added during return"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the transaction record, e.g. Issued or Returned",
+          "enum": ["Issued", "Returned", "Missing / Not Returned"]
+        },
+        "durationMinutes": {
+          "type": "number",
+          "description": "Total duration in minutes for which asset was with agent"
+        }
+      },
+      "required": ["id", "assetId", "employeeId", "agentName", "issueDate", "issueTime", "issueTimestamp", "shift", "status"]
+    }
+  },
+  "firestore": {
+    "assets/{assetId}": {
+      "schema": {
+        "$ref": "#/entities/Asset"
+      },
+      "description": "Primary storage of current assets and statuses"
+    },
+    "agents/{agentId}": {
+      "schema": {
+        "$ref": "#/entities/Agent"
+      },
+      "description": "Primary storage of agents"
+    },
+    "transactions/{transactionId}": {
+      "schema": {
+        "$ref": "#/entities/Transaction"
+      },
+      "description": "Audit trail logs of all issue and return activities"
+    }
+  }
+}
