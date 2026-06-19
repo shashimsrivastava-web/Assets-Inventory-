@@ -570,6 +570,7 @@ export default function App() {
             <IssueReturnForm
               assets={assets}
               agents={agents}
+              transactions={transactions}
               role={role}
               activeShift={activeShift}
               onRefresh={handleForceSync}

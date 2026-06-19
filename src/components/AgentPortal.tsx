@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Asset, Agent, Transaction, AssetStatus, Handover } from "../types";
 import { 
-  Key, ArrowUpRight, ArrowDownLeft, Clock, History, LogOut, LogIn, 
+  Key, ArrowUpRight, ArrowDownLeft, Clock, History, LogIn, 
   UserCheck, Smartphone, CheckCircle, AlertTriangle, ShieldAlert,
   Sliders, Calendar, FileText, Send, Camera, ArrowLeftRight
 } from "lucide-react";
@@ -57,6 +57,8 @@ export default function AgentPortal({
   const [targetAgentUId, setTargetAgentUId] = useState("");
   const [handoverRemarks, setHandoverRemarks] = useState("");
   const [handoverSubmitting, setHandoverSubmitting] = useState(false);
+  const [portalHandoverAssetId, setPortalHandoverAssetId] = useState("");
+  const [portalHandoverToAgentId, setPortalHandoverToAgentId] = useState("");
 
   // Check physical sessionStorage to keep agent logged in across hot reloads if preferred
   useEffect(() => {
@@ -102,15 +104,6 @@ export default function AgentPortal({
     }
   };
 
-  // Log-out agent safely
-  const handleLogout = () => {
-    setCurrentAgent(null);
-    sessionStorage.removeItem("active_portal_agent");
-    setSelectedAssetId("");
-    setIssueRemarks("");
-    setReturnRemarks("");
-  };
-
   // Self-Issue verification submission
   const handleSelfIssueSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,21 +115,26 @@ export default function AgentPortal({
       return;
     }
 
-    const assetObj = assets.find((a) => a.id === targetAssetId);
+    const assetObj = assets.find((a) => a.id.toUpperCase() === targetAssetId);
     if (!assetObj) {
       alert(`Asset ID ${targetAssetId} does not exist in master inventory list.`);
       return;
     }
 
-    // Guard duplicate issue
-    if (assetObj.status === AssetStatus.ISSUED) {
+    // Guard duplicate issue or active custody
+    const isAlreadyIssued = 
+      assetObj.status === AssetStatus.ISSUED || 
+      assetObj.status === AssetStatus.MISSING || 
+      !!assetObj.currentAssignmentId;
+
+    if (isAlreadyIssued) {
       onAddAlert(
         "duplicate_issue",
         "Agent Single-Desk Block",
-        `Agent ${currentAgent.name} tried self-issuing ${targetAssetId} which is already in custody.`,
+        `Agent ${currentAgent.name} tried self-issuing ${targetAssetId} which is already in custody or missing.`,
         targetAssetId
       );
-      alert(`Asset Warning: Device ${targetAssetId} is currently with another agent. Please clear custody first.`);
+      alert(`Asset Warning: Device ${targetAssetId} is already issued or in custody elsewhere. It cannot be issued until returned or directly handed over.`);
       return;
     }
 
@@ -278,6 +276,45 @@ export default function AgentPortal({
     } catch (err) {
       console.error("Handover submit failed", err);
       alert("Could not update secure hand-off database ledger.");
+    } finally {
+      setHandoverSubmitting(false);
+    }
+  };
+
+  // Dedicated submission handler for the central Handover Device panel
+  const handlePortalHandoverSubmit = async (assetId: string, toAgent: Agent) => {
+    if (!currentAgent) return;
+    const assetObj = assets.find((a) => a.id === assetId);
+    if (!assetObj) return;
+
+    setHandoverSubmitting(true);
+    const handoverDocId = assetId; // 1 active pending handover per device
+    const handoverData: Handover = {
+      id: handoverDocId,
+      assetId: assetId,
+      assetName: assetObj.name,
+      assetType: assetObj.type,
+      fromAgentId: currentAgent.id,
+      fromAgentName: currentAgent.name,
+      toAgentId: toAgent.id,
+      toAgentName: toAgent.name,
+      status: "pending",
+      timestamp: Date.now(),
+      remarks: handoverRemarks || "Direct Handover requested"
+    };
+
+    try {
+      await setDoc(doc(handoversCol, handoverDocId), handoverData);
+      alert(`Handover registered in system!\n\nAgent ${toAgent.name} (${toAgent.id}) must now sign in to Agent Desk Gateway and accept the takeover request to complete the transaction.`);
+      
+      // Clear inputs
+      setPortalHandoverAssetId("");
+      setPortalHandoverToAgentId("");
+      setHandoverRemarks("");
+      onRefresh();
+    } catch (err) {
+      console.error("Agent handover submission failed", err);
+      alert("Could not update handover transaction record in the database.");
     } finally {
       setHandoverSubmitting(false);
     }
@@ -539,14 +576,6 @@ export default function AgentPortal({
                 <Clock className="w-3 h-3 text-slate-400" />
                 Active Shift: <strong className="text-slate-800 font-bold uppercase">{activeShift}</strong>
               </div>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-1.5 px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-xl text-xs font-bold transition cursor-pointer"
-                title="Log Out of Portal"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                Sign Out
-              </button>
             </div>
           </div>
 
@@ -962,6 +991,145 @@ export default function AgentPortal({
                   </form>
                 )}
               </div>
+            </div>
+
+            {/* SECTION: DIRECT DEVICE HANDOVER FROM AGENT TO AGENT */}
+            <div id="central-device-handover-panel" className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mt-6">
+              <div className="flex items-center gap-2 pb-3 border-b border-slate-100 mb-5">
+                <div className="p-2 bg-amber-50 border border-amber-105 rounded-xl text-amber-700">
+                  <ArrowLeftRight className="w-4 h-4 shrink-0" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-800">
+                    Direct Shift Handover
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Coordinate a direct hardware custodial swap with another flight crew agent.</p>
+                </div>
+              </div>
+
+              {myDevicesHeld.length === 0 ? (
+                <div className="py-8 px-4 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                  <div className="w-10 h-10 bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center text-slate-400 mx-auto mb-3">
+                    <ShieldAlert className="w-5 h-5 shrink-0" />
+                  </div>
+                  <h4 className="font-bold text-xs text-slate-700">Handover Option Unavailable</h4>
+                  <p className="text-[10.5px] text-slate-500 max-w-sm mx-auto mt-1 leading-relaxed">
+                    This option is not available because you do not have any devices issued to you. Please self-issue a device from the Shift Cabinet above first.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider font-sans">
+                        1. Select Your Device to Handover *
+                      </label>
+                      <select
+                        value={portalHandoverAssetId}
+                        onChange={(e) => setPortalHandoverAssetId(e.target.value)}
+                        className="w-full px-3.5 py-2.5 border border-slate-200 bg-white rounded-xl text-xs font-semibold text-slate-800 cursor-pointer focus:ring-1 focus:ring-indigo-500/50 focus:outline-none"
+                        required
+                      >
+                        <option value="">-- Choose your device in custody --</option>
+                        {myDevicesHeld.map((asset) => (
+                          <option key={asset.id} value={asset.id}>
+                            [{asset.id}] - {asset.name} ({asset.type})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-slate-400 mt-1">Only devices you currently hold under active checkouts are listed here.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider font-sans">
+                        2. Recipient Agent U Number / ID *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Enter Recipient's Employee ID (e.g. EMP002 or U123)"
+                        value={portalHandoverToAgentId}
+                        onChange={(e) => setPortalHandoverToAgentId(e.target.value)}
+                        className="w-full px-3.5 py-2.5 border border-slate-200 bg-white rounded-xl text-xs font-mono font-bold uppercase text-slate-850 focus:ring-1 focus:ring-indigo-500/50 focus:outline-none"
+                        required
+                      />
+                      {(() => {
+                        const lookupVal = portalHandoverToAgentId.trim().toUpperCase();
+                        if (!lookupVal) return null;
+                        
+                        const matched = agents.find((ag) => ag.id.toUpperCase() === lookupVal);
+                        if (matched) {
+                          const isSelf = matched.id.toUpperCase() === currentAgent.id.toUpperCase();
+                          if (isSelf) {
+                            return (
+                              <p className="text-[10px] text-rose-600 font-bold mt-1.5 flex items-center gap-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                You cannot handover a device to yourself.
+                              </p>
+                            );
+                          }
+                          return (
+                            <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl mt-2 animate-fadeIn">
+                              <p className="text-[11px] text-emerald-800 font-bold flex items-center gap-1">
+                                ✓ Authorized Recipient Found: <strong className="text-slate-900 font-semibold">{matched.name}</strong>
+                              </p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">Division: {matched.department || "Operations Team"} · Status: Registered in database</p>
+                            </div>
+                          );
+                        } else if (lookupVal.length >= 3) {
+                          return (
+                            <p className="text-[10px] text-amber-600 font-bold mt-1.5 flex items-center gap-1.5 animate-pulse">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              No registered agent matching lookup ID "{lookupVal}" inside Roster database.
+                            </p>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 flex flex-col justify-between">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider font-sans">
+                        3. Handover Remarks / Comments
+                      </label>
+                      <textarea
+                        value={handoverRemarks}
+                        onChange={(e) => setHandoverRemarks(e.target.value)}
+                        placeholder="State any specific reason, physical condition, or flight handover schedule notes (optional)..."
+                        rows={3.5}
+                        className="w-full px-3.5 py-2.5 border border-slate-200 bg-slate-50/20 focus:bg-white rounded-xl text-xs focus:outline-none transition-all text-slate-800 font-sans"
+                      />
+                    </div>
+
+                    {(() => {
+                      const lookupVal = portalHandoverToAgentId.trim().toUpperCase();
+                      const matched = agents.find((ag) => ag.id.toUpperCase() === lookupVal);
+                      const isSelf = matched?.id.toUpperCase() === currentAgent.id.toUpperCase();
+                      const canSubmit = portalHandoverAssetId && matched && !isSelf;
+
+                      return (
+                        <button
+                          type="button"
+                          disabled={!canSubmit || handoverSubmitting}
+                          onClick={() => {
+                            if (matched && portalHandoverAssetId) {
+                              handlePortalHandoverSubmit(portalHandoverAssetId, matched);
+                            }
+                          }}
+                          className={`w-full py-3 text-xs sm:text-sm font-bold rounded-xl tracking-wider uppercase transition shadow-sm cursor-pointer ${
+                            canSubmit
+                              ? "bg-amber-600 hover:bg-amber-700 text-white"
+                              : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                          }`}
+                        >
+                          {handoverSubmitting ? "Submitting Transfer..." : "Initiate Direct Takeover Request ➔"}
+                        </button>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           ) : (
