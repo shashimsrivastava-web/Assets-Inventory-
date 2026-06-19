@@ -17,13 +17,19 @@ import AlertsManager from "./components/AlertsManager";
 import AgentPortal from "./components/AgentPortal";
 
 // Sidebar Navigation Icons
-import { LayoutDashboard, Key, Laptop, Users, History, BarChart3, Bell, Shield, Info, Database } from "lucide-react";
+import { LayoutDashboard, Key, Laptop, Users, History, BarChart3, Bell, Shield, Info, Database, User } from "lucide-react";
 
 export default function App() {
   const [role, setRole] = useState<"Admin" | "Supervisor">("Supervisor");
   const [activeTab, setActiveTab] = useState<"dashboard" | "handover" | "assets" | "agents" | "audit" | "reports" | "alerts">("dashboard");
   const [activeShift, setActiveShift] = useState(getRecommendedShiftByTime());
   const [viewMode, setViewMode] = useState<"console" | "agent">("console");
+
+  // Console credentials permission validation
+  const [isAuthenticatedSupervisor, setIsAuthenticatedSupervisor] = useState(() => sessionStorage.getItem("auth_supervisor") === "true");
+  const [isAuthenticatedAdmin, setIsAuthenticatedAdmin] = useState(() => sessionStorage.getItem("auth_admin") === "true");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
 
   // Collections state
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -230,6 +236,37 @@ export default function App() {
     setTimeout(() => setLoading(false), 500);
   };
 
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError("");
+
+    const term = passwordInput.trim();
+    if (!term) {
+      setPasswordError("Passcode cannot be empty.");
+      return;
+    }
+
+    if (role === "Supervisor") {
+      if (term === "Supervisor220!") {
+        setIsAuthenticatedSupervisor(true);
+        sessionStorage.setItem("auth_supervisor", "true");
+        setPasswordInput("");
+      } else {
+        setPasswordError("Invalid supervisor passcode. Please try again.");
+      }
+    } else if (role === "Admin") {
+      if (term === "Admin220!") {
+        setIsAuthenticatedAdmin(true);
+        sessionStorage.setItem("auth_admin", "true");
+        setPasswordInput("");
+      } else {
+        setPasswordError("Invalid administrator passcode. Please try again.");
+      }
+    }
+  };
+
+  const isCurrentRoleAuthenticated = role === "Supervisor" ? isAuthenticatedSupervisor : isAuthenticatedAdmin;
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Upper header */}
@@ -246,6 +283,93 @@ export default function App() {
             onAddAlert={handleAddNewAlert}
             onExitPortal={handleExitAgentPortal}
           />
+        </main>
+      ) : !isCurrentRoleAuthenticated ? (
+        /* Custom secure console lock/entry screen overlay */
+        <main className="flex-1 flex items-center justify-center p-6 md:p-12 bg-slate-50">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl max-w-md w-full animate-fadeIn text-center space-y-6">
+            <div className="space-y-2">
+              <div className="flex justify-center mb-1">
+                <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl text-slate-700 shadow-sm">
+                  <Shield className="w-8 h-8 text-[#071d49]" />
+                </div>
+              </div>
+              <h2 className="text-xl font-bold text-slate-900 font-sans tracking-tight">Console Authorization Required</h2>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Access to the administrative control systems requires valid role verification credentials.
+              </p>
+            </div>
+
+            <form onSubmit={handlePasswordSubmit} className="space-y-4 text-left">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1.5 tracking-wider font-sans">
+                  Target Authority Role
+                </label>
+                {role === "Supervisor" ? (
+                  <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-slate-50 text-slate-700 text-xs font-bold border border-slate-200">
+                    <User className="w-4 h-4 text-[#071d49]" />
+                    <span>Supervisor Desk Interface</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-indigo-50 text-indigo-800 text-xs font-bold border border-indigo-200">
+                    <Shield className="w-4 h-4 text-indigo-600" />
+                    <span>Administrator Console Interface</span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1.5 tracking-wider font-sans">
+                  Terminal Passcode
+                </label>
+                <input
+                  type="password"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  placeholder="••••••••••••"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium tracking-wide focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-center font-mono"
+                  autoFocus
+                />
+              </div>
+
+              {passwordError && (
+                <div className="text-xs text-rose-600 font-semibold bg-rose-50 border border-rose-100 px-3 py-2.5 rounded-xl text-center leading-relaxed font-sans">
+                  ⚠️ {passwordError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-3 bg-[#071d49] hover:bg-[#0a2966] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer transition-all active:scale-[0.98]"
+              >
+                Unlock Live Console
+              </button>
+            </form>
+
+            <div className="flex flex-col gap-2 pt-4 border-t border-slate-100 text-center">
+              <button
+                type="button"
+                onClick={handleSwitchToAgentPortal}
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-bold hover:underline cursor-pointer font-sans"
+              >
+                ➔ Access General Agent Desk Gateway instead
+              </button>
+              
+              {((role === "Admin" && isAuthenticatedSupervisor) || (role === "Supervisor" && isAuthenticatedAdmin)) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPasswordError("");
+                    setPasswordInput("");
+                    setRole(role === "Admin" ? "Supervisor" : "Admin");
+                  }}
+                  className="text-[10.5px] text-slate-500 hover:text-slate-700 font-medium hover:underline cursor-pointer mt-1 font-sans"
+                >
+                  Cancel & Return to {role === "Admin" ? "Supervisor" : "Admin"} Console View
+                </button>
+              )}
+            </div>
+          </div>
         </main>
       ) : (
         /* Main dashboard body */
@@ -370,6 +494,24 @@ export default function App() {
                 Access Desk Portal ➔
               </a>
             </div>
+
+            {/* Lock Console Session Button */}
+            {(isAuthenticatedSupervisor || isAuthenticatedAdmin) && (
+              <button
+                onClick={() => {
+                  setIsAuthenticatedSupervisor(false);
+                  setIsAuthenticatedAdmin(false);
+                  sessionStorage.removeItem("auth_supervisor");
+                  sessionStorage.removeItem("auth_admin");
+                  setPasswordInput("");
+                  setPasswordError("");
+                }}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-slate-200 hover:border-rose-200 bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-700 text-[11px] font-bold rounded-xl shadow-3xs transition-all cursor-pointer"
+              >
+                <Shield className="w-3.5 h-3.5 text-slate-400" />
+                Lock Console Session
+              </button>
+            )}
 
             {/* Database verification badges */}
             <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-[10px] text-slate-500 space-y-2">
