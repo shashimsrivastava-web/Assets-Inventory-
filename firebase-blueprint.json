@@ -138,6 +138,52 @@
         }
       },
       "required": ["id", "assetId", "employeeId", "agentName", "issueDate", "issueTime", "issueTimestamp", "shift", "status"]
+    },
+    "Handover": {
+      "title": "Handover",
+      "description": "An active or completed device direct handover transaction.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique auto-generated or asset ID of handover."
+        },
+        "assetId": {
+          "type": "string"
+        },
+        "assetName": {
+          "type": "string"
+        },
+        "assetType": {
+          "type": "string"
+        },
+        "fromAgentId": {
+          "type": "string"
+        },
+        "fromAgentName": {
+          "type": "string"
+        },
+        "toAgentId": {
+          "type": "string"
+        },
+        "toAgentName": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "completed", "declined"]
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "completedAt": {
+          "type": "number"
+        },
+        "remarks": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "assetId", "fromAgentId", "toAgentId", "status", "timestamp"]
     }
   },
   "firestore": {
@@ -158,6 +204,12 @@
         "$ref": "#/entities/Transaction"
       },
       "description": "Audit trail logs of all issue and return activities"
+    },
+    "handovers/{handoverId}": {
+      "schema": {
+        "$ref": "#/entities/Handover"
+      },
+      "description": "Direct handover transaction between custodians"
     }
   }
 }

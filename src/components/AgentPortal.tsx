@@ -174,8 +174,7 @@ export default function AgentPortal({
       await setDoc(doc(transactionsCol, txId), transaction);
 
       // 2. Set Asset Assignment
-      await setDoc(doc(assetsCol, targetAssetId), {
-        ...assetObj,
+      await updateDoc(doc(assetsCol, targetAssetId), {
         status: AssetStatus.ISSUED,
         currentAssignmentId: txId,
         lastUpdated: now.getTime()
@@ -230,8 +229,7 @@ export default function AgentPortal({
       await updateDoc(txDocRef, updatedTx);
 
       // 2. Clear Asset Assignments
-      await setDoc(doc(assetsCol, assetId), {
-        ...assetObj,
+      await updateDoc(doc(assetsCol, assetId), {
         status: AssetStatus.IN_OFFICE,
         currentAssignmentId: null,
         lastUpdated: returnTimeMs
@@ -385,8 +383,7 @@ export default function AgentPortal({
       await setDoc(doc(transactionsCol, txId), newTransaction);
 
       // 3. Point asset pointer record to new transaction id
-      await setDoc(doc(assetsCol, ho.assetId), {
-        ...assetObj,
+      await updateDoc(doc(assetsCol, ho.assetId), {
         status: AssetStatus.ISSUED,
         currentAssignmentId: txId,
         lastUpdated: currentMs

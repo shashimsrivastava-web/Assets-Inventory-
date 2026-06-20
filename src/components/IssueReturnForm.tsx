@@ -39,6 +39,23 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
   // Interactive scanner simulation
   const [showScanner, setShowScanner] = useState(false);
 
+  // Success Confirmation Pop-up modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    type: "Issue" | "Return" | "Handover";
+    txId: string;
+    assetId: string;
+    assetName: string;
+    assetType: string;
+    agentId: string;
+    agentName: string;
+    targetAgentId?: string;
+    targetAgentName?: string;
+    remarks?: string;
+    timestamp: number;
+    durationMinutes?: number;
+  } | null>(null);
+
   // Populate form with current shift when shift updates
   useEffect(() => {
     setIssueShift(activeShift);
@@ -167,14 +184,24 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
       await setDoc(doc(transactionsCol, txId), transaction);
 
       // 2. Update Asset Document
-      await setDoc(doc(assetsCol, targetAssetId), {
-        ...assetObj,
+      await updateDoc(doc(assetsCol, targetAssetId), {
         status: AssetStatus.ISSUED,
         currentAssignmentId: txId,
         lastUpdated: now.getTime()
       });
 
-      alert(`Success! Asset ${targetAssetId} successfully issued to ${agentObj.name}.`);
+      setConfirmModal({
+        isOpen: true,
+        type: "Issue",
+        txId,
+        assetId: targetAssetId,
+        assetName: assetObj.name,
+        assetType: assetObj.type,
+        agentId: targetAgentId,
+        agentName: agentObj.name,
+        remarks: issueRemarks || "None specified",
+        timestamp: now.getTime()
+      });
       setIssueAssetId("");
       setIssueRemarks("");
       onRefresh();
@@ -246,14 +273,25 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
       await updateDoc(txDocRef, updatedTx);
 
       // 2. Update Asset
-      await setDoc(doc(assetsCol, targetAssetId), {
-        ...assetObj,
+      await updateDoc(doc(assetsCol, targetAssetId), {
         status: returnStatus === "In Office" ? AssetStatus.IN_OFFICE : AssetStatus.MISSING,
         currentAssignmentId: null,
         lastUpdated: returnTimeMs
       });
 
-      alert(`Success! Asset ${targetAssetId} return processed successfully.`);
+      setConfirmModal({
+        isOpen: true,
+        type: "Return",
+        txId: activeTxId,
+        assetId: targetAssetId,
+        assetName: assetObj.name,
+        assetType: assetObj.type,
+        agentId: targetAgentId,
+        agentName: currentAgent?.name || "Unknown",
+        remarks: returnRemarks || "Returned normal checkout",
+        timestamp: returnTimeMs,
+        durationMinutes: updatedTx.durationMinutes
+      });
       setReturnAssetId("");
       setReturnRemarks("");
       onRefresh();
@@ -356,14 +394,26 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
       await setDoc(doc(transactionsCol, newTxId), newTransaction);
 
       // 3. Point asset pointer record to the new transaction ID
-      await setDoc(doc(assetsCol, targetAssetId), {
-        ...assetObj,
+      await updateDoc(doc(assetsCol, targetAssetId), {
         status: AssetStatus.ISSUED,
         currentAssignmentId: newTxId,
         lastUpdated: currentMs
       });
 
-      alert(`Success! Device ${targetAssetId} has been successfully handed over from ${currentAgent?.name} to ${toAgentObj.name}.`);
+      setConfirmModal({
+        isOpen: true,
+        type: "Handover",
+        txId: newTxId,
+        assetId: targetAssetId,
+        assetName: assetObj.name,
+        assetType: assetObj.type,
+        agentId: fromAgentId,
+        agentName: currentAgent?.name || "Unknown",
+        targetAgentId: toAgentObj.id,
+        targetAgentName: toAgentObj.name,
+        remarks: handoverRemarks || "No details specify.",
+        timestamp: currentMs
+      });
       setHandoverAssetId("");
       setHandoverToAgentId("");
       setHandoverRemarks("");
@@ -549,14 +599,20 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5">Device Asset ID *</label>
                     <div className="flex gap-2">
-                      <input
-                        type="text"
+                      <select
                         value={issueAssetId}
                         onChange={(e) => setIssueAssetId(e.target.value)}
-                        placeholder="Enter AST-XXX Code"
-                        className="flex-1 px-3.5 py-2.5 border border-slate-200 bg-slate-50/20 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:bg-white transition-all uppercase font-mono font-medium text-slate-800"
+                        className="flex-1 px-3.5 py-2.5 border border-slate-200 bg-white rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500/50 transition-all font-semibold font-mono text-slate-800 cursor-pointer"
                         required
-                      />
+                        id="issue-asset-select"
+                      >
+                        <option value="">-- Click here to select available device --</option>
+                        {availableAssetsForIssue.map((asset) => (
+                          <option key={asset.id} value={asset.id}>
+                            {asset.id} - {asset.name} ({asset.type})
+                          </option>
+                        ))}
+                      </select>
                       {issueAssetId && (
                         <button
                           type="button"
@@ -893,6 +949,127 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                 className="w-full mt-2 p-2 border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold rounded-xl text-center cursor-pointer transition-colors"
               >
                 Cancel Stream
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmModal && confirmModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white border border-slate-250 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden animate-scaleIn border-slate-200">
+            <div className="p-6 text-center border-b border-slate-100 bg-slate-50">
+              <div className="mx-auto w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-3 shadow-3xs">
+                <CheckCircle className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 font-sans tracking-tight">
+                Desk Transaction Verified 🤝
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-1 font-medium leading-relaxed">
+                The device custody transfer has been successfully recorded in the Master Ledger.
+              </p>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 font-sans text-xs space-y-2.5">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
+                  <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px]">Transaction Type</span>
+                  <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase flex items-center gap-1 ${
+                    confirmModal.type === "Issue" ? "bg-indigo-100 text-indigo-700" :
+                    confirmModal.type === "Return" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                  }`}>
+                    {confirmModal.type === "Issue" && <ArrowUpRight className="w-2.5 h-2.5" />}
+                    {confirmModal.type === "Return" && <ArrowDownLeft className="w-2.5 h-2.5" />}
+                    {confirmModal.type === "Handover" && <ArrowLeftRight className="w-2.5 h-2.5" />}
+                    {confirmModal.type}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Ledger TXID</span>
+                  <span className="font-mono font-bold text-slate-800">{confirmModal.txId}</span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Device Asset</span>
+                  <span className="font-bold text-slate-800 text-right">
+                    <span className="font-mono bg-slate-200/60 px-1.5 py-0.5 rounded text-[10px] mr-1">{confirmModal.assetId}</span> 
+                    {confirmModal.assetName}
+                  </span>
+                </div>
+
+                {confirmModal.type !== "Handover" ? (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">{confirmModal.type === "Issue" ? "Custodian Assigned" : "Returning Custodian"}</span>
+                    <span className="font-bold text-slate-800">
+                      {confirmModal.agentName} <span className="font-mono text-slate-400 text-[9.5px] font-normal">({confirmModal.agentId})</span>
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-2 pt-2 border-t border-slate-205">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 text-[10px] font-semibold uppercase">From Custodian</span>
+                      <span className="font-bold text-slate-700">
+                        {confirmModal.agentName} <span className="font-mono text-slate-400 text-[9px] font-normal">({confirmModal.agentId})</span>
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 text-[10px] font-semibold uppercase">To Custodian</span>
+                      <span className="font-bold text-indigo-700">
+                        {confirmModal.targetAgentName} <span className="font-mono text-indigo-505 text-[9px] font-normal">({confirmModal.targetAgentId})</span>
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {confirmModal.type === "Return" && confirmModal.durationMinutes !== undefined && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">Assigned Custody Duration</span>
+                    <span className="font-semibold text-slate-800">
+                      {confirmModal.durationMinutes} minutes
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-start pt-2 border-t border-slate-200/60">
+                  <span className="text-slate-500 font-medium shrink-0">Transaction Notes</span>
+                  <span className="font-semibold text-slate-600 text-right max-w-[200px] italic break-words">
+                    {confirmModal.remarks || "No remarks annotated"}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Timestamp</span>
+                  <span className="text-slate-650 font-medium text-slate-600">
+                    {new Date(confirmModal.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {new Date(confirmModal.timestamp).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    window.print();
+                  } catch (e) {
+                    console.log(e);
+                  }
+                }}
+                className="flex-1 px-3 py-2 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                id="modal-print-btn"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Slip
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmModal(null)}
+                className="flex-[2] px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-slate-950/10 cursor-pointer text-center"
+                id="modal-accept-btn"
+              >
+                Acknowledge Done
               </button>
             </div>
           </div>
