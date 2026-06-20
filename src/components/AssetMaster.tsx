@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Asset, AssetStatus } from "../types";
-import { Plus, Edit2, Trash2, Smartphone, Tablet, CreditCard, Layers, Tag, Eye, RefreshCw, Printer, UploadCloud, FileSpreadsheet, Scan, Camera, Image, Link, Settings, X, Wrench, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Plus, Edit2, Trash2, Smartphone, Tablet, CreditCard, Layers, Tag, Eye, RefreshCw, Printer, UploadCloud, FileSpreadsheet, Scan, Camera, Image, Link, Settings, X, Wrench, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
 import { addDoc, deleteDoc, doc, setDoc, onSnapshot } from "firebase/firestore";
 import { assetsCol, deviceTypesCol } from "../firebase";
 import { read, utils, writeFile } from "xlsx";
@@ -21,6 +22,54 @@ const PRESET_IMAGES = [
   { name: "BRS Warehouse Scanner", url: "https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=150&auto=format&fit=crop&q=60" },
   { name: "Samsung Galaxy Silver", url: "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=150&auto=format&fit=crop&q=60" },
 ];
+
+function generateCode39SVG(data: string) {
+  const code39Chars: Record<string, string> = {
+    '0': 'NNNWWNWNN', '1': 'WNNWNNNNW', '2': 'NNWWNNNNW', '3': 'WNWWNNNNN',
+    '4': 'NNNWWNNNW', '5': 'WNNWWNNNN', '6': 'NNWWWNNNN', '7': 'NNNWWNNWN',
+    '8': 'WNNWWNNWN', '9': 'NNWWWNNWN', 'A': 'WNNNNWNNW', 'B': 'NNWNNWNNW',
+    'C': 'WNWNNWNNN', 'D': 'NNNNWWNNW', 'E': 'WNNNWWNNN', 'F': 'NNWNWWNNN',
+    'G': 'NNNNNWWNW', 'H': 'WNNNNWWNN', 'I': 'NNWNNWWNN', 'J': 'NNNNWWWNN',
+    'K': 'WNNNNNNWW', 'L': 'NNWNNNNWW', 'M': 'WNWNNNNWN', 'N': 'NNNNWNNWW',
+    'O': 'WNNNWNNWN', 'P': 'NNWNWNNWN', 'Q': 'NNNNNNWWW', 'R': 'WNNNNNWWN',
+    'S': 'NNWNNNWWN', 'T': 'NNNNWNWWN', 'U': 'WWNNNNNNW', 'V': 'NWWNNNNNW',
+    'W': 'WWWNNNNNN', 'X': 'NWNNWNNNW', 'Y': 'WWNNWNNNN', 'Z': 'NWWWNNNNN',
+    '-': 'NWNNNNWNW', '.': 'WWNNNNWNN', ' ': 'NWWNNNWNN', '*': 'NWNNWNWNN',
+    '$': 'NWNWNWNNN', '/': 'NWNWNNNWN', '+': 'NWNNNWNWN', '%': 'NNNWNWNWN'
+  };
+
+  const formatted = `*${data.toUpperCase().trim()}*`;
+  let combinedPattern = "";
+  
+  for (let i = 0; i < formatted.length; i++) {
+    const char = formatted[i];
+    const pattern = code39Chars[char] || code39Chars['*'];
+    combinedPattern += pattern;
+    if (i < formatted.length - 1) {
+      combinedPattern += "N";
+    }
+  }
+
+  const bars: { x: number; width: number; isBlack: boolean }[] = [];
+  let currentX = 0;
+  
+  for (let idx = 0; idx < combinedPattern.length; idx++) {
+    const isBlack = idx % 2 === 0;
+    const isWide = combinedPattern[idx] === 'W';
+    const barWidth = isWide ? 2.5 : 1;
+    
+    bars.push({ x: currentX, width: barWidth, isBlack });
+    currentX += barWidth;
+  }
+
+  return (
+    <svg width="100%" height="80" viewBox={`0 0 ${currentX} 80`} preserveAspectRatio="none" className="w-full">
+      {bars.map((bar, index) => bar.isBlack ? (
+        <rect key={index} x={bar.x} y="0" width={bar.width} height="80" fill="black" />
+      ) : null)}
+    </svg>
+  );
+}
 
 export default function AssetMaster({ assets, role, loading, onRefresh, onAddAlert }: AssetMasterProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -46,8 +95,19 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
 
+  // Custom modal for barcode printing bypasses sandboxed iframe window.open blockers
+  const [activePrintAsset, setActivePrintAsset] = useState<Asset | null>(null);
+  const [printLayoutType, setPrintLayoutType] = useState<"standard" | "compact">("standard");
+
+  // Print All Barcodes states
+  const [activePrintAllAssets, setActivePrintAllAssets] = useState<Asset[] | null>(null);
+  const [batchPrintLayout, setBatchPrintLayout] = useState<"grid" | "continuous">("grid");
+  const [printSelectMode, setPrintSelectMode] = useState<"filtered" | "all">("filtered");
+
   // Custom modal overlay popup to handle iframe alert sandboxing safely
   const [customModal, setCustomModal] = useState<{ title: string; message: string; type: "success" | "error" | "info" } | null>(null);
+
+  const isWithinIframe = typeof window !== "undefined" && window.self !== window.top;
 
   const triggerCustomModal = (title: string, message: string, type: "success" | "error" | "info" = "info") => {
     setCustomModal({ title, message, type });
@@ -624,32 +684,14 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
   };
 
   const triggerPrint = (id: string, name: string) => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Print Label - ${id}</title>
-          <style>
-            body { font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 90vh; text-align: center; margin: 0; }
-            .card { border: 2px dashed #000; padding: 20px; border-radius: 8px; width: 280px; }
-            .barcode { letter-spacing: 5px; font-weight: bold; font-size: 24px; margin: 15px 0; border: 1px solid #000; padding: 8px; }
-            .meta { font-size: 14px; margin-top: 10px; }
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <h3>ASSET CONTROL LABEL</h3>
-            <div class="barcode">*${id}*</div>
-            <strong>${id}</strong>
-            <p>${name}</p>
-            <div class="meta">Asset-Link Control Management</div>
-          </div>
-          <script>window.print();</script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    const assetObj = assets.find((a) => a.id === id) || {
+      id,
+      name,
+      type: "Unknown",
+      status: AssetStatus.IN_OFFICE,
+      imageUrl: ""
+    };
+    setActivePrintAsset(assetObj);
   };
 
   const getDeviceIcon = (deviceType: string) => {
@@ -711,6 +753,23 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
           >
             <FileSpreadsheet className="w-4 h-4 text-indigo-500" />
             Export Inventory
+          </button>
+          <button
+            id="print-bulk-barcodes-button"
+            onClick={() => {
+              if (assets.length === 0) {
+                triggerCustomModal("Print Error", "There are no devices registered in your inventory to print barcodes from.", "error");
+                return;
+              }
+              const activeFiltersExist = searchTerm.trim() !== "" || typeFilter !== "All";
+              setPrintSelectMode(activeFiltersExist ? "filtered" : "all");
+              setActivePrintAllAssets(activeFiltersExist ? filteredAssets : assets);
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-indigo-500 text-slate-705 bg-white hover:bg-indigo-50/10 font-semibold rounded-xl text-xs tracking-wide shadow-sm transition-all cursor-pointer animate-fadeIn"
+            title="Print barcodes for devices in batch"
+          >
+            <Printer className="w-4 h-4 text-indigo-500" />
+            Print Barcodes
           </button>
           {role === "Admin" && (
             <button
@@ -1412,6 +1471,451 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
           </div>
         </div>
       )}
+
+      {activePrintAsset && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" onClick={() => setActivePrintAsset(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-6 animate-scaleIn select-none flex flex-col items-center">
+            
+            <button
+              onClick={() => setActivePrintAsset(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
+              type="button"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <span className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl mb-3 flex items-center justify-center border border-indigo-100/50">
+              <Printer className="w-5 h-5 shrink-0" />
+            </span>
+            <h4 className="font-bold text-slate-900 text-sm mb-1">Print Control Tag</h4>
+            <p className="text-[10px] text-slate-500 font-medium text-center mb-4 leading-normal">
+              Prepares label templates optimized for thermal barcode receipt printers or customized labels. Bypasses sandboxed iframe popup blocks perfectly.
+            </p>
+
+            {/* Label Style selector */}
+            <div className="w-full flex items-center justify-between mb-4 px-2.5 py-1.5 bg-slate-50 border border-slate-150 rounded-xl">
+              <span className="text-[9px] uppercase tracking-wider text-slate-450 font-bold pl-1">Label Density</span>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPrintLayoutType("standard")}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide transition-all cursor-pointer ${
+                    printLayoutType === "standard"
+                      ? "bg-white text-indigo-600 shadow-xs border border-indigo-100"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Standard (Code 39)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintLayoutType("compact")}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide transition-all cursor-pointer ${
+                    printLayoutType === "compact"
+                      ? "bg-white text-indigo-600 shadow-xs border border-indigo-100"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Compact Code
+                </button>
+              </div>
+            </div>
+
+            {/* Physical Label Live Preview */}
+            <div className="w-full border-2 border-dashed border-slate-200 p-4 rounded-2xl bg-slate-50/50 mb-5 flex flex-col items-center justify-center text-center font-mono">
+              <div className="border border-slate-900 bg-white p-4 rounded-lg w-full max-w-[260px] shadow-xs text-slate-900 select-none">
+                <span className="text-[8px] font-extrabold uppercase tracking-[2px] text-slate-900 border-b border-slate-900 pb-1 block mb-2 text-center">
+                  Asset Control Label
+                </span>
+                <div className="my-2 py-0.5">
+                  {generateCode39SVG(activePrintAsset.id)}
+                </div>
+                <div className="text-[11px] font-black tracking-widest text-slate-950 mt-1 uppercase text-center">
+                  * {activePrintAsset.id} *
+                </div>
+                <div className="text-[9px] font-bold text-slate-800 mt-2 font-sans truncate text-center">
+                  {activePrintAsset.name}
+                </div>
+                <div className="text-[8px] font-medium text-slate-500 mt-0.5 text-center">
+                  Type: {activePrintAsset.type || "Unknown"} | {activePrintAsset.status}
+                </div>
+              </div>
+            </div>
+
+            {isWithinIframe && (
+              <div className="w-full mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[10px] leading-relaxed font-semibold flex items-start gap-1.5 animate-fadeIn">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="font-extrabold uppercase text-amber-850 block mb-0.5">⚠️ Preview Sandbox Restrictions</span>
+                  Browsers protect security by disabling printers inside preview iframes. Open the app in a new independent tab to enable standard print layouts.
+                </div>
+              </div>
+            )}
+
+            {/* Print and Close Actions */}
+            <div className="flex flex-col gap-2 w-full">
+              {isWithinIframe && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      window.open(window.location.href, "_blank");
+                    } catch (err) {
+                      console.error("Open tab failed:", err);
+                      triggerCustomModal("Tab Blocked", "Your browser blocked opening a new tab. Please click the 'Open in static tab' button in the toolbar overlay or allow popups.", "error");
+                    }
+                  }}
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition shadow-sm cursor-pointer flex items-center justify-center gap-2 border border-indigo-700 animate-pulse"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                  Open in New Tab & Print
+                </button>
+              )}
+              <div className="flex gap-2 w-full">
+                <button
+                  type="button"
+                  onClick={() => setActivePrintAsset(null)}
+                  className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-250/70 hover:border-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer text-center"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      window.print();
+                    } catch (err) {
+                      console.error("Print call failed:", err);
+                      triggerCustomModal("System Printing Error", "Could not trigger system hardware print driver.", "error");
+                    }
+                  }}
+                  className={`flex-1 py-2 font-bold rounded-xl text-xs uppercase tracking-wider transition shadow-sm cursor-pointer flex items-center justify-center gap-1.5 ${
+                    isWithinIframe
+                      ? "bg-slate-100 text-slate-500 border border-slate-200"
+                      : "bg-slate-900 hover:bg-slate-850 text-white"
+                  }`}
+                  title={isWithinIframe ? "Might be blocked by browser sandbox unless opened in new tab" : "Trigger system printers"}
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  {isWithinIframe ? "Force Print" : "Trigger Print"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activePrintAllAssets && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" onClick={() => setActivePrintAllAssets(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 animate-scaleIn select-none flex flex-col">
+            
+            <button
+              onClick={() => setActivePrintAllAssets(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
+              type="button"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex flex-col items-center text-center">
+              <span className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl mb-3 flex items-center justify-center border border-indigo-100/50">
+                <Printer className="w-5 h-5 shrink-0" />
+              </span>
+              <h4 className="font-bold text-slate-900 text-sm mb-1">Batch Barcode Printing</h4>
+              <p className="text-[10px] text-slate-500 font-medium leading-normal mb-4">
+                Generate and print multiple asset barcodes at once. Set your printing layout and document content.
+              </p>
+            </div>
+
+            {/* Print Selection Scope */}
+            <div className="mb-4">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 pl-1">Print Scope</label>
+              <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1 border border-slate-150 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintSelectMode("filtered");
+                    setActivePrintAllAssets(filteredAssets);
+                  }}
+                  className={`py-1.5 rounded-lg text-xs font-semibold select-none cursor-pointer transition-all ${
+                    printSelectMode === "filtered"
+                      ? "bg-white text-indigo-600 shadow-xs border border-slate-200/50 font-bold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Filtered ({filteredAssets.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintSelectMode("all");
+                    setActivePrintAllAssets(assets);
+                  }}
+                  className={`py-1.5 rounded-lg text-xs font-semibold select-none cursor-pointer transition-all ${
+                    printSelectMode === "all"
+                      ? "bg-white text-indigo-600 shadow-xs border border-slate-200/50 font-bold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  All ({assets.length})
+                </button>
+              </div>
+            </div>
+
+            {/* Layout type selector */}
+            <div className="mb-5">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 pl-1">Layout Configuration</label>
+              <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1 border border-slate-150 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setBatchPrintLayout("grid")}
+                  className={`py-1.5 rounded-lg text-xs font-semibold select-none cursor-pointer transition-all ${
+                    batchPrintLayout === "grid"
+                      ? "bg-white text-indigo-600 shadow-xs border border-slate-200/50 font-bold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Two-Column Grid
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchPrintLayout("continuous")}
+                  className={`py-1.5 rounded-lg text-xs font-semibold select-none cursor-pointer transition-all ${
+                    batchPrintLayout === "continuous"
+                      ? "bg-white text-indigo-600 shadow-xs border border-slate-200/50 font-bold"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Continuous Roll
+                </button>
+              </div>
+            </div>
+
+            {/* Small live info / Preview section */}
+            <div className="border border-dashed border-slate-200 rounded-xl p-3 bg-slate-50 text-[11px] text-slate-600 leading-relaxed mb-5 font-medium">
+              <span className="font-bold text-slate-700 block mb-1">🖨️ Print Margins & Page Setup:</span>
+              <ul className="list-disc pl-4 space-y-1">
+                <li>Make sure to enable <strong>"Background graphics"</strong> under print/page options.</li>
+                <li>Set layout orientation to <strong>"Portrait"</strong>.</li>
+                <li>Ensure margins are set to <strong>"Default"</strong> or <strong>"None"</strong>.</li>
+              </ul>
+            </div>
+
+            {isWithinIframe && (
+              <div className="w-full mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[10px] leading-relaxed font-semibold flex items-start gap-1.5 animate-fadeIn">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="font-extrabold uppercase text-amber-850 block mb-0.5">⚠️ Preview Sandbox Restrictions</span>
+                  Browsers protect security by disabling printers inside preview iframes. Open the app in a new independent tab to enable standard print layouts.
+                </div>
+              </div>
+            )}
+
+            {/* Print and Close Actions */}
+            <div className="flex flex-col gap-2 w-full">
+              {isWithinIframe && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      window.open(window.location.href, "_blank");
+                    } catch (err) {
+                      console.error("Open tab failed:", err);
+                      triggerCustomModal("Tab Blocked", "Your browser blocked opening a new tab. Please click the 'Open in static tab' button in the toolbar overlay or allow popups.", "error");
+                    }
+                  }}
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition shadow-sm cursor-pointer flex items-center justify-center gap-2 border border-indigo-700 animate-pulse"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                  Open in New Tab & Print
+                </button>
+              )}
+              <div className="flex gap-2 w-full">
+                <button
+                  type="button"
+                  onClick={() => setActivePrintAllAssets(null)}
+                  className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-250/70 hover:border-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer text-center"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      window.print();
+                    } catch (err) {
+                      console.error("Print call failed:", err);
+                      triggerCustomModal("System Printing Error", "Could not trigger system hardware print driver.", "error");
+                    }
+                  }}
+                  className={`flex-1 py-2 font-bold rounded-xl text-xs uppercase tracking-wider transition shadow-sm cursor-pointer flex items-center justify-center gap-1.5 ${
+                    isWithinIframe
+                      ? "bg-slate-100 text-slate-500 border border-slate-200"
+                      : "bg-slate-900 hover:bg-slate-850 text-white"
+                  }`}
+                  title={isWithinIframe ? "Might be blocked by browser sandbox unless opened in new tab" : "Trigger system printers"}
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  {isWithinIframe ? "Force Print" : "Trigger Print"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Embedded hidden offline printable block for Chrome / Safari hardware output */}
+      {activePrintAsset && createPortal(
+        <div id="printable-barcode-section">
+          <div className="print-card-box">
+            <div className="print-logo-hdr">ASSET CONTROL LABEL</div>
+            <div className="print-barcode-svg">
+              {generateCode39SVG(activePrintAsset.id)}
+            </div>
+            <div className="print-asset-id">
+              * {activePrintAsset.id.toUpperCase()} *
+            </div>
+            <div className="print-asset-name">
+              <strong>{activePrintAsset.name}</strong>
+              <div style={{ fontSize: "11px", marginTop: "5px", color: "#555" }}>
+                Type: {activePrintAsset.type} | {activePrintAsset.status}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Embedded hidden offline printable block for batch asset printing */}
+      {activePrintAllAssets && activePrintAllAssets.length > 0 && createPortal(
+        <div id="printable-all-barcodes-section">
+          <div className={batchPrintLayout === "grid" ? "print-all-grid" : "print-all-continuous"}>
+            {activePrintAllAssets.map((asset) => (
+              <div key={asset.id} className="print-card-box">
+                <div className="print-logo-hdr">ASSET CONTROL LABEL</div>
+                <div className="print-barcode-svg">
+                  {generateCode39SVG(asset.id)}
+                </div>
+                <div className="print-asset-id">
+                  * {asset.id.toUpperCase()} *
+                </div>
+                <div className="print-asset-name">
+                  <strong>{asset.name}</strong>
+                  <div style={{ fontSize: "11px", marginTop: "5px", color: "#555" }}>
+                    Type: {asset.type || "Unknown"} | {asset.status}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Injected Print Stylesheet Override */}
+      <style>{`
+        /* Hide printable sections on screen completely */
+        #printable-barcode-section,
+        #printable-all-barcodes-section {
+          display: none !important;
+        }
+
+        @media print {
+          /* Hide the main React app root and other body nodes completely */
+          #root {
+            display: none !important;
+          }
+          body > *:not(#printable-barcode-section):not(#printable-all-barcodes-section) {
+            display: none !important;
+          }
+
+          /* Show the printable sections correctly */
+          #printable-barcode-section {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            background: white !important;
+            page-break-inside: avoid !important;
+          }
+
+          #printable-all-barcodes-section {
+            display: block !important;
+            width: 100% !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            background: white !important;
+          }
+
+          .print-all-grid {
+            display: grid !important;
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 20px !important;
+            padding: 20px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+          }
+
+          .print-all-continuous {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            width: 100% !important;
+          }
+
+          .print-all-continuous .print-card-box {
+            page-break-after: always !important;
+            margin-bottom: 20px !important;
+          }
+
+          .print-card-box {
+            border: 3px solid #000000 !important;
+            padding: 25px !important;
+            border-radius: 12px !important;
+            width: 320px !important;
+            text-align: center !important;
+            font-family: monospace !important;
+            background: white !important;
+            box-sizing: border-box !important;
+            page-break-inside: avoid !important;
+            margin: 0 auto !important;
+          }
+
+          .print-logo-hdr {
+            font-size: 16px !important;
+            font-weight: 800 !important;
+            letter-spacing: 2px !important;
+            margin-bottom: 12px !important;
+            border-bottom: 2px solid #000000 !important;
+            padding-bottom: 6px !important;
+          }
+
+          .print-barcode-svg {
+            width: 100% !important;
+            height: 75px !important;
+            margin: 14px 0 !important;
+          }
+
+          .print-asset-id {
+            font-weight: 700 !important;
+            font-size: 18px !important;
+            letter-spacing: 1px !important;
+          }
+
+          .print-asset-name {
+            font-size: 13px !important;
+            margin-top: 4px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
