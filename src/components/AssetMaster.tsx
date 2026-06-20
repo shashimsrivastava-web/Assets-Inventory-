@@ -3,7 +3,7 @@ import { Asset, AssetStatus } from "../types";
 import { Plus, Edit2, Trash2, Smartphone, Tablet, CreditCard, Layers, Tag, Eye, RefreshCw, Printer, UploadCloud, FileSpreadsheet, Scan, Camera, Image, Link, Settings, X, Wrench, AlertCircle, CheckCircle2 } from "lucide-react";
 import { addDoc, deleteDoc, doc, setDoc, onSnapshot } from "firebase/firestore";
 import { assetsCol, deviceTypesCol } from "../firebase";
-import { read, utils } from "xlsx";
+import { read, utils, writeFile } from "xlsx";
 
 interface AssetMasterProps {
   assets: Asset[];
@@ -41,6 +41,10 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
   const [isTypesManagerOpen, setIsTypesManagerOpen] = useState(false);
   const [newTypeName, setNewTypeName] = useState("");
   const [editingType, setEditingType] = useState<{ id: string; name: string } | null>(null);
+
+  // Search & Type Filters inside Asset Master
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState("All");
 
   // Custom modal overlay popup to handle iframe alert sandboxing safely
   const [customModal, setCustomModal] = useState<{ title: string; message: string; type: "success" | "error" | "info" } | null>(null);
@@ -173,36 +177,71 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
           
           if (!assetIdVal) continue; // Skip empty/header rows
 
+          const cleanedId = assetIdVal.toUpperCase().trim().replace(/\s+/g, "-");
+
           // 2. Device Type from "Asset Type"
           let deviceType = findValueByHeader(row, ["Asset Type", "Device Type", "Type", "AssetType", "DeviceType"]);
           if (!deviceType) {
             deviceType = "Other"; // Default fallback
           }
 
-          // 3. Device Friendly Name from Location, Brand Details, and Usage Location combined
-          const location = findValueByHeader(row, ["Location", "Loc", "Location Key"]);
-          const brand = findValueByHeader(row, ["Brand Details", "Brand", "Brand_Details", "BrandDetails"]);
-          const usage = findValueByHeader(row, ["Usage Location", "Usage_Location", "UsageLocation", "Usage Key"]);
+          // 3. Device Friendly Name - support direct columns or build from pieces
+          let combinedName = findValueByHeader(row, ["Friendly Name", "Device Name", "Asset Name", "Name", "Device Friendly Name"]);
+          if (!combinedName) {
+            const location = findValueByHeader(row, ["Location", "Loc", "Location Key"]);
+            const brand = findValueByHeader(row, ["Brand Details", "Brand", "Brand_Details", "BrandDetails"]);
+            const usage = findValueByHeader(row, ["Usage Location", "Usage_Location", "UsageLocation", "Usage Key"]);
 
-          // Build combined friendly name safely skipping empty parts
-          const nameParts = [brand, location, usage].filter(val => val !== "");
-          const combinedName = nameParts.join(" - ") || `Asset ${assetIdVal}`;
+            // Build combined friendly name safely skipping empty parts
+            const nameParts = [brand, location, usage].filter(val => val !== "");
+            combinedName = nameParts.join(" - ") || `Asset ${cleanedId}`;
+          }
 
-          // Clean ID representation: letters or numbers, uppercase
-          const cleanedId = assetIdVal.toUpperCase().trim().replace(/\s+/g, "-");
+          // 4. Current Status
+          const statusVal = findValueByHeader(row, ["Current Status", "Asset Status", "Status"]);
+          let parsedStatus = AssetStatus.IN_OFFICE;
+          if (statusVal) {
+            const matchedEnum = Object.values(AssetStatus).find(
+              (v) => v.toLowerCase() === statusVal.trim().toLowerCase()
+            );
+            if (matchedEnum) {
+              parsedStatus = matchedEnum;
+            }
+          }
+
+          // 5. Image URL
+          const imageUrlVal = findValueByHeader(row, ["Image URL", "ImageUrl", "Image", "Image_URL"]);
+
+          // Check if this asset already exists in local assets array
+          const existingAsset = assets.find(a => a.id.toUpperCase() === cleanedId.toUpperCase());
+          const currentAssignmentId = existingAsset ? (existingAsset.currentAssignmentId || null) : null;
+          const finalStatus = statusVal ? parsedStatus : (existingAsset ? existingAsset.status : AssetStatus.IN_OFFICE);
+          
+          let finalImageUrl = PRESET_IMAGES[0].url;
+          if (existingAsset && existingAsset.imageUrl) {
+            finalImageUrl = existingAsset.imageUrl;
+          }
+          if (imageUrlVal && typeof imageUrlVal === "string" && imageUrlVal.trim() !== "") {
+            const cleanedVal = imageUrlVal.trim();
+            const isPlaceholder = cleanedVal.startsWith("[") || cleanedVal.toLowerCase().includes("embedded") || cleanedVal.toLowerCase().includes("preserve") || cleanedVal.toLowerCase().includes("do not edit");
+            if (!isPlaceholder) {
+              finalImageUrl = cleanedVal;
+            }
+          }
 
           results.push({
             id: cleanedId,
             type: deviceType,
             name: combinedName,
-            status: AssetStatus.IN_OFFICE, // Under active available custody inside office
-            imageUrl: PRESET_IMAGES[0].url,
+            status: finalStatus,
+            currentAssignmentId: currentAssignmentId,
+            imageUrl: finalImageUrl,
             lastUpdated: Date.now()
           });
         }
 
         if (results.length === 0) {
-          alert("No valid rows matching ID found. Please inspect the headers in your uploaded spreadsheet.");
+          triggerCustomModal("Validation Error", "No valid rows matching ID found. Please inspect the headers in your uploaded spreadsheet.", "error");
           setExcelFile(null);
           setParsedAssets([]);
         } else {
@@ -210,7 +249,7 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
         }
       } catch (err) {
         console.error("Error reading spreadsheet layout:", err);
-        alert("Could not successfully parse this spreadsheet file.");
+        triggerCustomModal("Parsing Error", "Could not successfully parse this spreadsheet file.", "error");
       }
     };
     reader.readAsArrayBuffer(file);
@@ -272,11 +311,11 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
         text: `Excel master inventory import finished! Registered ${successCount} devices (${failureCount} failed).`
       });
 
-      try {
-        alert(`Excel master inventory import finished!\n\nRegistered devices: ${successCount}\nFailed: ${failureCount}`);
-      } catch (alertErr) {
-        console.warn("System modal alert blocked by user's browser sandbox environment:", alertErr);
-      }
+      triggerCustomModal(
+        "Excel Import Finished",
+        `Database synchronization completed! Successfully registered/updated ${successCount} devices in Firestore. Failed entries: ${failureCount}.`,
+        "success"
+      );
       
       setExcelFile(null);
       setParsedAssets([]);
@@ -291,9 +330,11 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
         type: "error",
         text: "Encountered database compilation error or write issue."
       });
-      try {
-        alert("Encountered a database issue compiling bulk imports.");
-      } catch (alertErr) {}
+      triggerCustomModal(
+        "Import compilation failed",
+        "Encountered a database issue compiling bulk imports. Please verify your Firestore connections.",
+        "error"
+      );
     } finally {
       setIsExcelImporting(false);
     }
@@ -515,6 +556,73 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
     }
   };
 
+  const filteredAssets = assets.filter((asset) => {
+    const matchesSearch = 
+      (asset.id || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (asset.name || "").toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (typeFilter === "All") {
+      return matchesSearch;
+    }
+    
+    if (typeFilter === "Other") {
+      const knownTypeNames = deviceTypes.map(dt => (dt.name || "").toLowerCase());
+      const isKnown = knownTypeNames.includes((asset.type || "").toLowerCase());
+      return matchesSearch && (!isKnown || (asset.type || "").toLowerCase() === "other");
+    }
+
+    return matchesSearch && (asset.type || "").toLowerCase() === typeFilter.toLowerCase();
+  });
+
+  const handleExportExcel = () => {
+    try {
+      const exportData = assets.map((asset) => {
+        let exportedImageUrl = asset.imageUrl || "";
+        // Excel maximum cell text length is 32,767 characters. 
+        // Base64 photos will exceed this, so we export a placeholder that we recognize on import.
+        if (exportedImageUrl.startsWith("data:") || exportedImageUrl.length > 30000) {
+          exportedImageUrl = "[Embedded Base64 Image - Do Not Edit]";
+        }
+        return {
+          "Asset ID": asset.id,
+          "Device Type": asset.type,
+          "Friendly Name": asset.name,
+          "Current Status": asset.status,
+          "Image URL": exportedImageUrl
+        };
+      });
+
+      const worksheet = utils.json_to_sheet(exportData);
+      const workbook = utils.book_new();
+      utils.book_append_sheet(workbook, worksheet, "Inventory");
+
+      const maxIdLen = assets.length > 0 ? Math.max(...assets.map(a => (a.id || "").length), 10) : 10;
+      const maxTypeLen = assets.length > 0 ? Math.max(...assets.map(a => (a.type || "").length), 15) : 15;
+      const maxNameLen = assets.length > 0 ? Math.max(...assets.map(a => (a.name || "").length), 20) : 20;
+      const maxStatusLen = assets.length > 0 ? Math.max(...assets.map(a => (a.status || "").length), 15) : 15;
+      
+      worksheet["!cols"] = [
+        { wch: maxIdLen + 2 },
+        { wch: maxTypeLen + 2 },
+        { wch: maxNameLen + 4 },
+        { wch: maxStatusLen + 2 },
+        { wch: 35 }
+      ];
+
+      const dateStr = new Date().toISOString().split("T")[0];
+      writeFile(workbook, `Asset_Inventory_Export_${dateStr}.xlsx`);
+      
+      setToastNotification({
+        type: "success",
+        text: "Successfully compiled and downloaded Excel master database backup."
+      });
+      setTimeout(() => setToastNotification(null), 4000);
+    } catch (err) {
+      console.error("Export failed:", err);
+      triggerCustomModal("Export Error", "Failed to export database inventory sheet. Check browser permissions.", "error");
+    }
+  };
+
   const triggerPrint = (id: string, name: string) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
@@ -595,6 +703,15 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
               Upload Excel Inventory
             </button>
           )}
+          <button
+            id="export-excel-inventory-button"
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-indigo-500 text-slate-705 bg-white hover:bg-indigo-50/10 font-semibold rounded-xl text-xs tracking-wide shadow-sm transition-all cursor-pointer animate-fadeIn"
+            title="Export all inventory to Excel workbook"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-indigo-500" />
+            Export Inventory
+          </button>
           {role === "Admin" && (
             <button
               id="manage-device-categories-button"
@@ -1119,6 +1236,47 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
         </div>
       )}
 
+      {/* Filtering and Search Controls */}
+      <div id="inventory-filter-bar" className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row gap-4 items-center justify-between">
+        <div className="relative w-full sm:max-w-xs">
+          <input
+            type="text"
+            placeholder="Search ID or friendly name..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-8.5 pr-8.5 py-2 border border-slate-200 bg-white rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500/50 transition-all text-slate-800"
+          />
+          <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-400">
+            <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm("")}
+              className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-600 font-bold text-xs cursor-pointer"
+            >
+              ×
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0 justify-end">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Filter by Type:</span>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="px-3 py-1.5 border border-slate-200 bg-white rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer transition-all text-slate-750 min-w-[140px]"
+          >
+            <option value="All">All Device Types</option>
+            {deviceTypes.map((dt) => (
+              <option key={dt.id} value={dt.name}>{dt.name}</option>
+            ))}
+            <option value="Other">Other / Custom</option>
+          </select>
+        </div>
+      </div>
+
       {/* Grid List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {assets.length === 0 ? (
@@ -1127,8 +1285,14 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
             <p className="text-sm font-medium">No assets registered yet in the database.</p>
             <p className="text-xs text-slate-400 mt-1">Click "Register New Asset" above to initialize your control log.</p>
           </div>
+        ) : filteredAssets.length === 0 ? (
+          <div className="col-span-full py-12 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+            <Layers className="w-12 h-12 text-slate-300 mx-auto mb-3 opacity-60" />
+            <p className="text-sm font-medium">No assets match your search or filter selection.</p>
+            <p className="text-xs text-slate-400 mt-1">Try adjusting your filters or clearing the search term.</p>
+          </div>
         ) : (
-          assets.map((asset) => (
+          filteredAssets.map((asset) => (
             <div
               key={asset.id}
               className="border border-slate-200 hover:border-slate-300 rounded-2xl overflow-hidden bg-white flex flex-col justify-between transition-all hover:shadow-xs relative"
