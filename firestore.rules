@@ -10,5 +10,8 @@ service cloud.firestore {
     match /transactions/{transactionId} {
       allow read, write: if true;
     }
+    match /handovers/{handoverId} {
+      allow read, write: if true;
+    }
   }
 }

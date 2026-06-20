@@ -6,7 +6,7 @@ import firebaseConfig from "../firebase-applet-config.json";
 const app = initializeApp(firebaseConfig);
 
 // Initialize Cloud Firestore
-export const db = getFirestore(app);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Export common refs
 export const assetsCol = collection(db, "assets");
