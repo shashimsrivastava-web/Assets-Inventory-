@@ -3,7 +3,7 @@ import { Asset, Agent, Transaction, AssetStatus, Handover } from "../types";
 import { 
   Key, ArrowUpRight, ArrowDownLeft, Clock, History, LogIn, 
   UserCheck, Smartphone, CheckCircle, AlertTriangle, ShieldAlert,
-  Sliders, Calendar, FileText, Send, Camera, ArrowLeftRight
+  Sliders, Calendar, FileText, Send, Camera, ArrowLeftRight, LogOut
 } from "lucide-react";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { db, assetsCol, transactionsCol, handoversCol } from "../firebase";
@@ -102,6 +102,15 @@ export default function AgentPortal({
     } else {
       setLoginError("Credentials do not match the authorized Shift Agent Roster. Please verify with your Supervisor.");
     }
+  };
+
+  // Handle portal sign-out
+  const handleSignOut = () => {
+    sessionStorage.removeItem("active_portal_agent");
+    setCurrentAgent(null);
+    setSelectedAssetId("");
+    setIssueRemarks("");
+    setReturnRemarks("");
   };
 
   // Self-Issue verification submission
@@ -576,6 +585,14 @@ export default function AgentPortal({
                 <Clock className="w-3 h-3 text-slate-400" />
                 Active Shift: <strong className="text-slate-800 font-bold uppercase">{activeShift}</strong>
               </div>
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 border border-rose-200 hover:border-rose-300 rounded-lg px-2.5 py-1 text-[11px] font-bold shadow-3xs hover:shadow-2xs cursor-pointer transition-all"
+                id="agent-signout-btn"
+              >
+                <LogOut className="w-3 h-3 shrink-0" />
+                Sign Out
+              </button>
             </div>
           </div>
 
