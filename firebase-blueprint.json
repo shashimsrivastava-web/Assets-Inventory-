@@ -184,6 +184,20 @@
         }
       },
       "required": ["id", "assetId", "fromAgentId", "toAgentId", "status", "timestamp"]
+    },
+    "DeviceType": {
+      "title": "DeviceType",
+      "description": "A customized device type category.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "name"]
     }
   },
   "firestore": {
@@ -210,6 +224,12 @@
         "$ref": "#/entities/Handover"
       },
       "description": "Direct handover transaction between custodians"
+    },
+    "deviceTypes/{typeId}": {
+      "schema": {
+        "$ref": "#/entities/DeviceType"
+      },
+      "description": "Customizable device categories managed dynamically by administrator"
     }
   }
 }

@@ -1,5 +1,5 @@
 import { doc, setDoc, getDocs, writeBatch } from "firebase/firestore";
-import { db, assetsCol, agentsCol, transactionsCol } from "../firebase";
+import { db, assetsCol, agentsCol, transactionsCol, deviceTypesCol } from "../firebase";
 import { AssetStatus } from "../types";
 
 const INITIAL_ASSETS = [
@@ -166,6 +166,21 @@ const INITIAL_TRANSACTIONS = [
 
 export async function bootstrapDatabaseIfEmpty() {
   try {
+    // Always check/seed customizable device types independently
+    const typesSnap = await getDocs(deviceTypesCol);
+    if (typesSnap.empty) {
+      console.log("Seeding default device types dynamically...");
+      const DEFAULT_TYPES = [
+        { id: "ipad", name: "iPad" },
+        { id: "ingenico-pos", name: "Ingenico POS" },
+        { id: "mobile-phone", name: "Mobile Phone" },
+        { id: "brs-scanner", name: "BRS Scanner" }
+      ];
+      for (const t of DEFAULT_TYPES) {
+        await setDoc(doc(deviceTypesCol, t.id), t);
+      }
+    }
+
     const assetsSnap = await getDocs(assetsCol);
     if (!assetsSnap.empty) {
       console.log("Database already seeded with assets.");

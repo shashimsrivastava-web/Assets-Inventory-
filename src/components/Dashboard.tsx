@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Asset, Agent, Transaction, AssetStatus } from "../types";
-import { Tablet, Smartphone, CreditCard, Shield, Laptop, AlertCircle, FileSpreadsheet, Search, CheckCircle, RefreshCw, AlertTriangle, Layers, Clock, HelpCircle, Layout } from "lucide-react";
+import { Tablet, Smartphone, CreditCard, Shield, Laptop, AlertCircle, FileSpreadsheet, Search, CheckCircle, RefreshCw, AlertTriangle, Layers, Clock, HelpCircle, Layout, Scan } from "lucide-react";
 
 interface DashboardProps {
   assets: Asset[];
@@ -61,11 +61,17 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
   const getDeviceIcon = (deviceType: string) => {
     switch (deviceType.toLowerCase()) {
       case "ipad":
+      case "ipads":
         return <Tablet className="w-5 h-5 text-emerald-500" />;
       case "ingenico":
+      case "ingenico pos":
         return <CreditCard className="w-5 h-5 text-indigo-500" />;
       case "mobile phone":
+      case "mobile phones":
         return <Smartphone className="w-5 h-5 text-teal-400" />;
+      case "brs scanner":
+      case "brs scanners":
+        return <Scan className="w-5 h-5 text-blue-500" />;
       default:
         return <Layers className="w-5 h-5 text-amber-500" />;
     }
@@ -176,6 +182,63 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
             <span className="text-2xl font-bold text-slate-450">{devicesNotTaken}</span>
             <span className="text-[9px] bg-slate-100 text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded font-sans font-bold">Unused</span>
           </div>
+        </div>
+      </div>
+
+      {/* Dynamic Summary Breakdown by Asset Type */}
+      <div id="dashboard-asset-type-breakdown" className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+        <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+          <div>
+            <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
+              <Layers className="w-4 h-4 text-indigo-500" />
+              Dynamic Inventory Summary by Device Class
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-0.5">Real-time status metrics segregated by physical asset category</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {Array.from(new Set(assets.map((a) => a.type || "Other"))).sort().map((type) => {
+            const ofType = assets.filter((a) => (a.type || "Other") === type);
+            const total = ofType.length;
+            const issued = ofType.filter((a) => a.status === AssetStatus.ISSUED).length;
+            const inOffice = ofType.filter((a) => a.status === AssetStatus.IN_OFFICE).length;
+            const missing = ofType.filter((a) => a.status === AssetStatus.MISSING).length;
+            const notTaken = ofType.filter((a) => a.status === AssetStatus.NOT_TAKEN).length;
+
+            return (
+              <div key={type} className="bg-slate-50/50 border border-slate-200/60 hover:border-slate-300 rounded-xl p-4 transition-all" id={`class-summary-${type.toLowerCase().replace(/\s+/g, '-')}`}>
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="p-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg">
+                    {getDeviceIcon(type)}
+                  </div>
+                  <span className="font-bold text-xs text-slate-800 uppercase tracking-tight">{type}s</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-white border border-slate-200/85 rounded-lg py-1.5">
+                    <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none">Total</div>
+                    <div className="text-xs font-bold text-slate-850 mt-1">{total}</div>
+                  </div>
+                  <div className="bg-indigo-50/50 border border-indigo-100 rounded-lg py-1.5">
+                    <div className="text-[9px] font-bold text-indigo-500 uppercase tracking-wider leading-none">Issued</div>
+                    <div className="text-xs font-bold text-indigo-750 mt-1">{issued}</div>
+                  </div>
+                  <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg py-1.5">
+                    <div className="text-[9px] font-bold text-emerald-500 uppercase tracking-wider leading-none">In Office</div>
+                    <div className="text-xs font-bold text-emerald-750 mt-1">{inOffice}</div>
+                  </div>
+                </div>
+
+                {(missing > 0 || notTaken > 0) && (
+                  <div className="mt-2 text-[9px] text-slate-400 flex justify-between px-1">
+                    {missing > 0 && <span className="font-semibold text-rose-500">⚠️ {missing} missing</span>}
+                    {notTaken > 0 && <span className="font-semibold text-slate-500">⏳ {notTaken} not taken</span>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

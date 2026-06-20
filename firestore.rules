@@ -13,5 +13,8 @@ service cloud.firestore {
     match /handovers/{handoverId} {
       allow read, write: if true;
     }
+    match /deviceTypes/{typeId} {
+      allow read, write: if true;
+    }
   }
 }

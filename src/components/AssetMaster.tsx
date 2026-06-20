@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Asset, AssetStatus } from "../types";
-import { Plus, Edit2, Trash2, Smartphone, Tablet, CreditCard, Layers, Tag, Eye, RefreshCw, Printer, UploadCloud, FileSpreadsheet } from "lucide-react";
-import { addDoc, deleteDoc, doc, setDoc } from "firebase/firestore";
-import { assetsCol } from "../firebase";
+import { Plus, Edit2, Trash2, Smartphone, Tablet, CreditCard, Layers, Tag, Eye, RefreshCw, Printer, UploadCloud, FileSpreadsheet, Scan, Camera, Image, Link, Settings, X, Wrench, AlertCircle, CheckCircle2 } from "lucide-react";
+import { addDoc, deleteDoc, doc, setDoc, onSnapshot } from "firebase/firestore";
+import { assetsCol, deviceTypesCol } from "../firebase";
 import { read, utils } from "xlsx";
 
 interface AssetMasterProps {
@@ -18,6 +18,7 @@ const PRESET_IMAGES = [
   { name: "iPad Silver Clean", url: "https://images.unsplash.com/photo-1589739900243-4b52cd9b104e?w=150&auto=format&fit=crop&q=60" },
   { name: "Ingenico Terminal Black", url: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=150&auto=format&fit=crop&q=60" },
   { name: "iPhone Charcoal", url: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=150&auto=format&fit=crop&q=60" },
+  { name: "BRS Warehouse Scanner", url: "https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=150&auto=format&fit=crop&q=60" },
   { name: "Samsung Galaxy Silver", url: "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=150&auto=format&fit=crop&q=60" },
 ];
 
@@ -34,6 +35,67 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
   const [imageUrl, setImageUrl] = useState("");
   const [showQr, setShowQr] = useState<string | null>(null);
 
+  // Dynamic Device Types and Toast Notification states
+  const [deviceTypes, setDeviceTypes] = useState<{ id: string; name: string }[]>([]);
+  const [toastNotification, setToastNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [isTypesManagerOpen, setIsTypesManagerOpen] = useState(false);
+  const [newTypeName, setNewTypeName] = useState("");
+  const [editingType, setEditingType] = useState<{ id: string; name: string } | null>(null);
+
+  // Custom modal overlay popup to handle iframe alert sandboxing safely
+  const [customModal, setCustomModal] = useState<{ title: string; message: string; type: "success" | "error" | "info" } | null>(null);
+
+  const triggerCustomModal = (title: string, message: string, type: "success" | "error" | "info" = "info") => {
+    setCustomModal({ title, message, type });
+    try {
+      alert(`${title}\n\n${message}`);
+    } catch (e) {
+      console.warn("Native alert blocked by iframe sandbox, using elegant custom DOM modal:", e);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    const unsubTypes = onSnapshot(deviceTypesCol, (snapshot) => {
+      if (!active) return;
+      const list: { id: string; name: string }[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data && data.name) {
+          list.push({ id: docSnap.id, name: data.name });
+        }
+      });
+      
+      const sorted = list.sort((a, b) => a.name.localeCompare(b.name));
+      if (sorted.length === 0) {
+        // Fallback to initial defaults if collection is empty
+        const defaults = [
+          { id: "ipad", name: "iPad" },
+          { id: "ingenico-pos", name: "Ingenico POS" },
+          { id: "mobile-phone", name: "Mobile Phone" },
+          { id: "brs-scanner", name: "BRS Scanner" }
+        ];
+        console.log("No custom categories in database, showing default categories:", defaults);
+        setDeviceTypes(defaults);
+      } else {
+        setDeviceTypes(sorted);
+      }
+    }, (error) => {
+      console.warn("Device types subscription failed, falling back to offline categories:", error);
+      const defaults = [
+        { id: "ipad", name: "iPad" },
+        { id: "ingenico-pos", name: "Ingenico POS" },
+        { id: "mobile-phone", name: "Mobile Phone" },
+        { id: "brs-scanner", name: "BRS Scanner" }
+      ];
+      setDeviceTypes(defaults);
+    });
+    return () => {
+      active = false;
+      unsubTypes();
+    };
+  }, []);
+
   // Excel Sheet upload states
   const [isExcelOpen, setIsExcelOpen] = useState(false);
   const [excelFile, setExcelFile] = useState<File | null>(null);
@@ -41,6 +103,23 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
   const [dragActive, setDragActive] = useState(false);
   const [isExcelImporting, setIsExcelImporting] = useState(false);
   const [importFeedback, setImportFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handlePhotoUploadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.size > 2 * 1024 * 1024) {
+        alert("The selected image file is too large (maximum limit: 2 MB).");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setImageUrl(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const resetForm = () => {
     setAssetId("");
@@ -223,8 +302,18 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
   const handleEdit = (asset: Asset) => {
     setEditingAsset(asset);
     setAssetId(asset.id);
-    if (["iPad", "Ingenico", "Mobile Phone"].includes(asset.type)) {
-      setType(asset.type);
+    const normalizedType = (asset.type || "").toLowerCase().trim();
+    if (normalizedType === "ipad" || normalizedType === "ipads") {
+      setType("iPad");
+      setCustomType("");
+    } else if (normalizedType === "ingenico" || normalizedType === "ingenico pos") {
+      setType("Ingenico POS");
+      setCustomType("");
+    } else if (normalizedType === "mobile phone" || normalizedType === "mobile phones") {
+      setType("Mobile Phone");
+      setCustomType("");
+    } else if (normalizedType === "brs scanner" || normalizedType === "brs scanners") {
+      setType("BRS Scanner");
       setCustomType("");
     } else {
       setType("Other");
@@ -263,7 +352,7 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
       name,
       status,
       imageUrl: imageUrl || PRESET_IMAGES[0].url,
-      currentAssignmentId: editingAsset ? editingAsset.currentAssignmentId : null,
+      currentAssignmentId: (editingAsset && editingAsset.currentAssignmentId) ? editingAsset.currentAssignmentId : null,
       lastUpdated: Date.now()
     };
 
@@ -272,9 +361,139 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
       setIsFormOpen(false);
       resetForm();
       onRefresh();
+
+      // Show dynamic user-friendly alert prompt/toast
+      const successMsg = editingAsset 
+        ? `Successfully modified details for device ${cleanedAssetId} in database.`
+        : `Successfully registered new specifications for ${cleanedAssetId} inside inventory.`;
+      
+      setToastNotification({
+        type: "success",
+        text: successMsg
+      });
+
+      // Show the beautifully styled custom popup dialog to confirm database update!
+      triggerCustomModal(
+        editingAsset ? "Asset Modified" : "Asset Registered",
+        successMsg,
+        "success"
+      );
+
+      // Automatically hide after 4 seconds
+      setTimeout(() => setToastNotification(null), 4000);
     } catch (error) {
       console.error("Error saving asset: ", error);
-      alert("Failed to save asset. Check your console log.");
+      setToastNotification({
+        type: "error",
+        text: `Error saving asset specifications for ${cleanedAssetId}. Permission incident.`
+      });
+      triggerCustomModal(
+        "Save Failed",
+        `Failed to save details for asset ${cleanedAssetId} due to a permissions incident or network issue.`,
+        "error"
+      );
+    }
+  };
+
+  // Device type database category handlers
+  const handleAddType = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTypeName.trim()) return;
+
+    const trimmedName = newTypeName.trim();
+    // Clean to lowercase hyphenated ID
+    const typeId = trimmedName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    if (!typeId) {
+      triggerCustomModal("Invalid Input", "Please provide a valid category name consisting of letters, numbers, or spaces.", "error");
+      return;
+    }
+
+    const alreadyExists = deviceTypes.some(t => t.id === typeId || t.name.toLowerCase() === trimmedName.toLowerCase());
+    if (alreadyExists) {
+      triggerCustomModal(
+        "Duplicate Category",
+        `The category "${trimmedName}" matches an existing dynamic category description or ID.`,
+        "error"
+      );
+      return;
+    }
+
+    try {
+      await setDoc(doc(deviceTypesCol, typeId), { id: typeId, name: trimmedName });
+      setNewTypeName("");
+      setToastNotification({
+        type: "success",
+        text: `Device category "${trimmedName}" was recorded in master databases.`
+      });
+      
+      // Confirm the new category added with a pop-up!
+      triggerCustomModal(
+        "Device Category Registered",
+        `Success! The device category "${trimmedName}" has been successfully added to the master list. It is now immediately available in the registration form select dropdown.`,
+        "success"
+      );
+
+      setTimeout(() => setToastNotification(null), 4000);
+    } catch (err) {
+      console.error("Error storing device type:", err);
+      triggerCustomModal("Database Error", "Failed to add custom device type into Firebase Firestore database.", "error");
+    }
+  };
+
+  const handleUpdateType = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingType || !newTypeName.trim()) return;
+
+    const trimmedName = newTypeName.trim();
+    try {
+      await setDoc(doc(deviceTypesCol, editingType.id), { id: editingType.id, name: trimmedName });
+      setNewTypeName("");
+      setEditingType(null);
+      setToastNotification({
+        type: "success",
+        text: `Device category renamed to "${trimmedName}" successfully.`
+      });
+      
+      triggerCustomModal(
+        "Device Category Modified",
+        `Success! The category has been renamed to "${trimmedName}" in the database.`,
+        "success"
+      );
+
+      setTimeout(() => setToastNotification(null), 4000);
+    } catch (err) {
+      console.error("Error editing device type:", err);
+      triggerCustomModal("Database Error", "Failed to modify device category in Firestore database.", "error");
+    }
+  };
+
+  const handleDeleteType = async (typeId: string, name: string) => {
+    let confirmDelete = true;
+    try {
+      confirmDelete = window.confirm(`Are you sure you want to delete Category "${name}"?\n\nWarning: This will remove "${name}" from selection dropdown list. Existing assets marked as "${name}" are unaffected.`);
+    } catch (e) {
+      console.warn("Native confirm blocked by user sandbox, safety-overriding.", e);
+    }
+
+    if (!confirmDelete) return;
+
+    try {
+      await deleteDoc(doc(deviceTypesCol, typeId));
+      setToastNotification({
+        type: "success",
+        text: `Device category "${name}" is no longer active.`
+      });
+      
+      triggerCustomModal(
+        "Device Category Removed",
+        `The device category "${name}" has been successfully deleted from active lists.`,
+        "success"
+      );
+
+      setTimeout(() => setToastNotification(null), 4000);
+    } catch (err) {
+      console.error("Error deleting style:", err);
+      triggerCustomModal("Database Error", "Failed to delete category from database.", "error");
     }
   };
 
@@ -328,11 +547,17 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
   const getDeviceIcon = (deviceType: string) => {
     switch (deviceType.toLowerCase()) {
       case "ipad":
+      case "ipads":
         return <Tablet className="w-4 h-4 text-emerald-500" />;
       case "ingenico":
+      case "ingenico pos":
         return <CreditCard className="w-4 h-4 text-indigo-500" />;
       case "mobile phone":
+      case "mobile phones":
         return <Smartphone className="w-4 h-4 text-teal-400" />;
+      case "brs scanner":
+      case "brs scanners":
+        return <Scan className="w-4 h-4 text-blue-500" />;
       default:
         return <Layers className="w-4 h-4 text-amber-500" />;
     }
@@ -362,6 +587,7 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
               onClick={() => {
                 setIsExcelOpen(!isExcelOpen);
                 setIsFormOpen(false); // Close individual form if toggled
+                setIsTypesManagerOpen(false);
               }}
               className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 hover:border-indigo-500 text-slate-705 bg-white hover:bg-indigo-50/10 font-semibold rounded-xl text-xs tracking-wide shadow-sm transition-all cursor-pointer animate-fadeIn"
             >
@@ -369,9 +595,30 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
               Upload Excel Inventory
             </button>
           )}
+          {role === "Admin" && (
+            <button
+              id="manage-device-categories-button"
+              onClick={() => {
+                setIsTypesManagerOpen(!isTypesManagerOpen);
+                setIsFormOpen(false);
+                setIsExcelOpen(false);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-2 border font-semibold rounded-xl text-xs tracking-wide shadow-sm transition-all cursor-pointer ${
+                isTypesManagerOpen
+                  ? "border-amber-500 bg-amber-50/20 text-amber-700"
+                  : "border-slate-200 hover:border-amber-500 text-slate-705 bg-white hover:bg-amber-50/10"
+              }`}
+            >
+              <Settings className="w-4 h-4 text-amber-550" />
+              Manage Device Categories
+            </button>
+          )}
           <button
             id="register-asset-button"
-            onClick={handleOpenCreateForm}
+            onClick={() => {
+              handleOpenCreateForm();
+              setIsTypesManagerOpen(false);
+            }}
             className="flex items-center gap-1.5 px-4 py-2 text-white bg-slate-900 hover:bg-slate-800 font-semibold rounded-xl text-xs tracking-wide shadow-sm transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -379,6 +626,148 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
           </button>
         </div>
       </div>
+
+      {toastNotification && (
+        <div
+          id="operation-success-toast"
+          className={`mb-5 p-3.5 rounded-2xl border flex items-center gap-3 animate-slideIn ${
+            toastNotification.type === "success"
+              ? "bg-emerald-50 border-emerald-250 text-emerald-800"
+              : "bg-rose-50 border-rose-250 text-rose-800"
+          }`}
+        >
+          {toastNotification.type === "success" ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
+          )}
+          <div className="flex-1 text-xs font-semibold">
+            {toastNotification.text}
+          </div>
+          <button
+            onClick={() => setToastNotification(null)}
+            className={`text-[10px] uppercase font-bold tracking-wider cursor-pointer ${
+              toastNotification.type === "success" ? "text-emerald-700 hover:underline" : "text-rose-700 hover:underline"
+            }`}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {role === "Admin" && isTypesManagerOpen && (
+        <div id="categories-manager-panel" className="mb-6 p-5 border border-slate-200 bg-amber-50/10 rounded-2xl animate-fadeIn space-y-4">
+          <div className="flex justify-between items-start pb-2 border-b border-amber-100 mb-2">
+            <div>
+              <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                <Wrench className="w-4 h-4 text-amber-500" />
+                Customize Master Device Categories
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Add, modify or delete standard class categories available in the registration select menu.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setIsTypesManagerOpen(false);
+                setEditingType(null);
+                setNewTypeName("");
+              }}
+              className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Form */}
+            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3.5">
+              <span className="text-xs font-bold text-slate-800 block">
+                {editingType ? "✏️ Rename Category Class" : "➕ Add Custom Class"}
+              </span>
+              <form onSubmit={editingType ? handleUpdateType : handleAddType} className="space-y-3.5">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Category Name *</label>
+                  <input
+                    type="text"
+                    value={newTypeName}
+                    onChange={(e) => setNewTypeName(e.target.value)}
+                    placeholder="e.g. Card Reader, VR Headset"
+                    className="w-full px-3 py-2 border border-slate-200 bg-white rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition-all text-slate-800"
+                    required
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  {editingType && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingType(null);
+                        setNewTypeName("");
+                      }}
+                      className="px-3 py-1.5 border border-slate-200 text-slate-500 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-slate-50 transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 text-white bg-amber-600 hover:bg-amber-705 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-xs transition cursor-pointer"
+                  >
+                    {editingType ? "Rename" : "Create Option"}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* List */}
+            <div className="md:col-span-2 bg-white border border-slate-200 rounded-xl p-4">
+              <span className="text-xs font-bold text-slate-800 block mb-3">Dropdown Options Classes ({deviceTypes.length})</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1">
+                {deviceTypes.length === 0 ? (
+                  <div className="col-span-full text-center py-6 text-slate-400 text-xs italic">
+                    Loading category lists from database...
+                  </div>
+                ) : (
+                  deviceTypes.map((dt) => (
+                    <div
+                      key={dt.id}
+                      className="flex items-center justify-between p-2 rounded-lg border border-slate-100 bg-slate-50/20 text-xs"
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Tag className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span className="font-bold text-slate-800 truncate" title={dt.name}>{dt.name}</span>
+                        <span className="text-[9px] font-mono text-slate-400 truncate max-w-[80px]">({dt.id})</span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingType(dt);
+                            setNewTypeName(dt.name);
+                          }}
+                          className="p-1 text-slate-500 hover:text-amber-650 hover:bg-amber-50 rounded transition cursor-pointer"
+                          title="Rename Option"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteType(dt.id, dt.name)}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
+                          title="Delete Option"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {role === "Admin" && isExcelOpen && (
         <div id="excel-import-panel" className="mb-6 p-5 border border-dashed border-slate-250 bg-slate-50/40 rounded-2xl animate-fadeIn">
@@ -559,15 +948,24 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-650 mb-1.5 mb-1.5">Device Type *</label>
+              <label className="block text-xs font-semibold text-slate-650 mb-1.5">Device Type *</label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
                 className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-sm font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer transition-all text-slate-705"
               >
-                <option value="iPad">iPad</option>
-                <option value="Ingenico">Ingenico POS</option>
-                <option value="Mobile Phone">Mobile Phone</option>
+                {deviceTypes.length > 0 ? (
+                  deviceTypes.map((dt) => (
+                    <option key={dt.id} value={dt.name}>{dt.name}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="iPad">iPad</option>
+                    <option value="Ingenico POS">Ingenico POS</option>
+                    <option value="Mobile Phone">Mobile Phone</option>
+                    <option value="BRS Scanner">BRS Scanner</option>
+                  </>
+                )}
                 <option value="Other">Other / Custom</option>
               </select>
             </div>
@@ -619,24 +1017,83 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
               )}
             </div>
 
-            <div className="md:col-span-2 lg:col-span-3">
-              <label className="block text-xs font-semibold text-slate-650 mb-2.5">Preset Device Photo</label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
-                {PRESET_IMAGES.map((img) => (
-                  <button
-                    key={img.name}
-                    type="button"
-                    onClick={() => setImageUrl(img.url)}
-                    className={`flex flex-col items-center p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                      imageUrl === img.url
-                        ? "border-indigo-600 bg-indigo-50/40 text-indigo-750 font-semibold"
-                        : "border-slate-200 hover:bg-slate-50 text-slate-600"
-                    }`}
-                  >
-                    <img referrerPolicy="no-referrer" src={img.url} alt={img.name} className="w-10 h-10 object-cover rounded-md mb-1.5 border border-slate-200/60" />
-                    <span className="text-[10px] line-clamp-1">{img.name}</span>
-                  </button>
-                ))}
+            <div className="md:col-span-2 lg:col-span-3 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-650 mb-2.5">Preset Device Photo</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
+                  {PRESET_IMAGES.map((img) => (
+                    <button
+                      key={img.name}
+                      type="button"
+                      onClick={() => setImageUrl(img.url)}
+                      className={`flex flex-col items-center p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                        imageUrl === img.url
+                          ? "border-indigo-600 bg-indigo-50/40 text-indigo-750 font-semibold"
+                          : "border-slate-200 hover:bg-slate-50 text-slate-600"
+                      }`}
+                    >
+                      <img referrerPolicy="no-referrer" src={img.url} alt={img.name} className="w-10 h-10 object-cover rounded-md mb-1.5 border border-slate-200/60" />
+                      <span className="text-[10px] line-clamp-1">{img.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3.5">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Camera className="w-4 h-4 text-slate-500" />
+                  Or Add Custom Device Photo
+                </span>
+                
+                <div className="flex flex-col sm:flex-row gap-4">
+                  {/* Option A: Upload File */}
+                  <div className="flex-1 space-y-1.5">
+                    <span className="block text-[11px] font-semibold text-slate-550">File Upload (.png, .jpg, .jpeg)</span>
+                    <label className="flex items-center justify-center gap-2 px-3 py-2 border border-slate-250 hover:border-indigo-500 hover:bg-white rounded-xl text-xs font-semibold text-slate-700 transition-all cursor-pointer bg-slate-100/50">
+                      <UploadCloud className="w-4 h-4 text-slate-500" />
+                      Choose Local Image File
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoUploadChange}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Option B: Enter Web URL */}
+                  <div className="flex-1 space-y-1.5">
+                    <span className="block text-[11px] font-semibold text-slate-550">Web Image URL</span>
+                    <input
+                      type="url"
+                      value={imageUrl.startsWith("data:") ? "" : imageUrl}
+                      onChange={(e) => setImageUrl(e.target.value)}
+                      placeholder="https://example.com/photo.jpg"
+                      className="w-full px-3 py-2 border border-slate-250 bg-white rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500/50 transition-all text-slate-800"
+                    />
+                  </div>
+                </div>
+
+                {/* Live Preview Bar */}
+                {imageUrl && (
+                  <div className="pt-2 flex items-center gap-3">
+                    <img
+                      referrerPolicy="no-referrer"
+                      src={imageUrl}
+                      alt="Device preview"
+                      className="w-12 h-12 object-cover rounded-xl border border-slate-200 bg-white"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=150&auto=format&fit=crop&q=60";
+                      }}
+                    />
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-700 block">Selected Photo Preview</span>
+                      <span className="text-[10px] text-slate-400 font-mono block truncate max-w-[280px]">
+                        {imageUrl.startsWith("data:") ? "Local Upload (Base64 Mode)" : imageUrl}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -751,6 +1208,46 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
           ))
         )}
       </div>
+
+      {customModal && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" onClick={() => setCustomModal(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl border border-slate-150 max-w-sm w-full p-6 animate-scaleIn select-none">
+            <button
+              onClick={() => setCustomModal(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="flex flex-col items-center text-center">
+              {customModal.type === "success" && (
+                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-3.5 border border-emerald-100">
+                  <CheckCircle2 className="w-6 h-6 shrink-0" />
+                </div>
+              )}
+              {customModal.type === "error" && (
+                <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-3.5 border border-rose-100">
+                  <AlertCircle className="w-6 h-6 shrink-0" />
+                </div>
+              )}
+              {customModal.type === "info" && (
+                <div className="w-12 h-12 bg-indigo-55/10 text-indigo-600 rounded-full flex items-center justify-center mb-3.5 border border-indigo-100">
+                  <Wrench className="w-6 h-6 shrink-0" />
+                </div>
+              )}
+              <h4 className="font-bold text-slate-900 text-sm mb-1.5">{customModal.title}</h4>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed mb-4">{customModal.message}</p>
+              <button
+                type="button"
+                onClick={() => setCustomModal(null)}
+                className="w-full py-2 bg-slate-900 text-white font-bold hover:bg-slate-800 rounded-xl text-xs uppercase tracking-wider transition shadow-sm cursor-pointer"
+              >
+                O.K.
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

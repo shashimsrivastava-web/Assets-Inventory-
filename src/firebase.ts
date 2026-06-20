@@ -13,3 +13,4 @@ export const assetsCol = collection(db, "assets");
 export const agentsCol = collection(db, "agents");
 export const transactionsCol = collection(db, "transactions");
 export const handoversCol = collection(db, "handovers");
+export const deviceTypesCol = collection(db, "deviceTypes");
