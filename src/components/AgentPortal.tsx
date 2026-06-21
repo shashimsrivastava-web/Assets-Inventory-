@@ -1329,6 +1329,15 @@ function VideoSimulator() {
 
   return (
     <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-slate-950">
+      {/* Render the video element unconditionally to prevent Ref race conditions */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={`w-full h-full object-cover ${cameraPermissionState === "granted" ? "block" : "hidden"}`}
+      />
+
       {cameraPermissionState === "pending" && (
         <div className="flex flex-col items-center opacity-75 p-4 text-center z-10">
           <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mb-3" />
@@ -1347,30 +1356,21 @@ function VideoSimulator() {
           <span className="font-bold text-[11px] text-rose-400 uppercase tracking-wider block">
             Camera Initialization Failed
           </span>
-          <p className="text-[10px] text-slate-400 leading-relaxed max-h-16 overflow-y-auto">
+          <p className="text-[10px] text-slate-400 leading-relaxed max-h-16 overflow-y-auto w-full break-words">
             {cameraError}
           </p>
-          <div className="mt-2 text-[8.5px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono select-all">
+          <div className="mt-2 text-[8.5px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono select-all w-full break-all">
             Check local site settings or check secure domain contexts (https)
           </div>
         </div>
       )}
 
       {cameraPermissionState === "granted" && (
-        <div className="relative w-full h-full">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
-          {/* Green viewfinder square center border */}
-          <div className="absolute inset-8 border border-dashed border-teal-400/40 rounded flex items-center justify-center pointer-events-none z-10">
-            <span className="text-[9px] bg-black/60 text-teal-400 px-1.5 py-0.5 border border-teal-500/20 rounded font-mono uppercase tracking-widest leading-none font-black animate-pulse">
-              [ LIVE SCANNING VIEWPORT ]
-            </span>
-          </div>
+        /* Green viewfinder square center border */
+        <div className="absolute inset-8 border border-dashed border-teal-400/40 rounded flex items-center justify-center pointer-events-none z-10">
+          <span className="text-[9px] bg-black/60 text-teal-400 px-1.5 py-0.5 border border-teal-500/20 rounded font-mono uppercase tracking-widest leading-none font-black animate-pulse">
+            [ LIVE SCANNING VIEWPORT ]
+          </span>
         </div>
       )}
     </div>
