@@ -1127,77 +1127,65 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 }
 
 function VideoSimulator({ onScan }: { onScan: (id: string) => void }) {
-  const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const [cameraPermissionState, setCameraPermissionState] = useState<"pending" | "granted" | "denied">("pending");
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   useEffect(() => {
     let html5QrCode: Html5Qrcode | null = null;
-    let activeStream: MediaStream | null = null;
+    let isScanning = true;
+    const scannerRef = { current: false }; // Track if scanner is running
 
-    async function enableCamera() {
+    async function enableScanner() {
       try {
         setCameraPermissionState("pending");
-        // Request video stream with preferred environmental camera
-        const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" }
-        });
-        activeStream = mediaStream;
-        setCameraPermissionState("granted");
-        
-        // Initialize scanner
         html5QrCode = new Html5Qrcode("reader");
+        
         await html5QrCode.start(
           { facingMode: "environment" },
           { fps: 10, qrbox: { width: 250, height: 250 } },
           (decodedText) => {
+            if (!isScanning) return;
+            isScanning = false;
             onScan(decodedText);
-            html5QrCode?.stop().catch(console.error);
+            if (scannerRef.current) {
+              scannerRef.current = false;
+              html5QrCode?.stop().catch(console.error);
+            }
           },
           (errorMessage) => {
             // console.log(errorMessage);
           }
         );
-
+        scannerRef.current = true;
+        setCameraPermissionState("granted");
       } catch (err: any) {
-        console.error("Camera access failed:", err);
+        console.error("Scanner initialization failed:", err);
         setCameraPermissionState("denied");
         setCameraError(err.message || "Permissions blocked or no camera detected.");
       }
     }
 
-    enableCamera();
+    enableScanner();
 
     return () => {
-      if (html5QrCode) {
-        html5QrCode.stop().catch(console.error);
-      }
-      if (activeStream) {
-        activeStream.getTracks().forEach((track) => track.stop());
+      if (scannerRef.current) {
+        scannerRef.current = false;
+        html5QrCode?.stop().catch(console.error);
       }
     };
   }, [onScan]);
 
   return (
     <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-slate-950">
-      <div id="reader" className="hidden w-full h-full"></div>
+      <div id="reader" className="w-full h-full"></div>
       
-      {/* Render the video element unconditionally to prevent Ref race conditions */}
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className={`w-full h-full object-cover ${cameraPermissionState === "granted" ? "block" : "hidden"}`}
-      />
-
       {cameraPermissionState === "pending" && (
         <div className="flex flex-col items-center opacity-75 p-4 text-center z-10">
           <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mb-3" />
           <span className="font-mono text-[9px] tracking-widest text-[#2dd4bf] font-bold">
             CONNECTING SHIFT SCAN CAMERA...
           </span>
-          <span className="text-[9px] text-slate-500 mt-1 font-semibold">Please authorize web devices permissions callback</span>
+          <span className="text-[9px] text-slate-500 mt-1 font-semibold">Please authorize web devices permissions</span>
         </div>
       )}
 
