@@ -296,6 +296,9 @@ export default function AgentMaster({ agents, role, loading, onRefresh }: AgentM
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <Users className="w-5 h-5 text-indigo-500" />
             Registered Shift Agents
+            <span className="inline-flex items-center bg-indigo-50 border border-indigo-150 text-indigo-700 text-xs font-black px-2.5 py-0.5 rounded-full shadow-3xs animate-fadeIn">
+              {agents.length} Enrolled
+            </span>
           </h2>
           <p className="text-slate-500 text-xs mt-1">Enroll and update team members authorized to be issued shift devices.</p>
         </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { selectBaseClass, selectStyle, optionClass } from "../lib/selectTheme";
 import { Asset, Agent, Transaction, AssetStatus } from "../types";
-import { Tablet, Smartphone, CreditCard, Shield, Laptop, AlertCircle, FileSpreadsheet, Search, CheckCircle, RefreshCw, AlertTriangle, Layers, Clock, HelpCircle, Layout, Scan, Camera } from "lucide-react";
+import { Tablet, Smartphone, CreditCard, Shield, Laptop, AlertCircle, FileSpreadsheet, Search, CheckCircle, RefreshCw, AlertTriangle, Layers, Clock, HelpCircle, Layout, Scan, Camera, Share2 } from "lucide-react";
 import { sortDeviceTypes } from "../utils/deviceTypeSort";
 
 interface DashboardProps {
@@ -36,9 +36,36 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
   const [releaseRemainingId, setReleaseRemainingId] = useState("");
   const [releaseError, setReleaseError] = useState("");
   const [isShiftReleasedWithExceptions, setIsShiftReleasedWithExceptions] = useState(false);
+  const [isShiftFullyReleased, setIsShiftFullyReleased] = useState(false);
   const [releasedExceptionsList, setReleasedExceptionsList] = useState<Array<{holderName: string, holderId: string, deviceCount: number}>>([]);
   const [certReleaseSupervisorName, setCertReleaseSupervisorName] = useState("");
   const [certReleaseSupervisorId, setCertReleaseSupervisorId] = useState("");
+
+  const buildWhatsAppReleaseMessage = () => {
+    const ts = new Date().toLocaleString("en-GB", { hour12: false });
+    return `✈️ *Lufthansa Operational Handover - Shift Release Success*\n\n` +
+      `📅 *Date/Time:* ${ts}\n` +
+      `🔒 *Status:* Cabinet system and hardware fully aligned. Shift clearance completed!\n\n` +
+      `📋 *Key Handover Metrics:*\n` +
+      `• Fleet Total: ${totalDevices} Devices\n` +
+      `• Cabinet Shelf: ${devicesAvailable} Devices physically verified present in locker\n` +
+      `• Outstanding Custody Loans: 0 (NIL)\n\n` +
+      `👤 *Certified & Authorized by:* ${verifierName || "N/A"} (ID: ${verifierId || "N/A"})\n` +
+      `🌍 *Location:* DELSM Terminal Charging Locker Station`;
+  };
+
+  const buildWhatsAppExceptionMessage = () => {
+    const ts = new Date().toLocaleString("en-GB", { hour12: false });
+    const exceptionsText = releasedExceptionsList
+      .map(exc => `• 👤 *${exc.holderName}* (ID: ${exc.holderId}): ${exc.deviceCount} Outstanding Device(s)`)
+      .join("\n");
+    return `✈️ *Lufthansa Handover - EXCEPTIONAL SHIFT RELEASE*\n\n` +
+      `📅 *Date/Time:* ${ts}\n` +
+      `⚠️ *Status:* ALL SHIFT RELEASED EXCEPT:\n` +
+      `${exceptionsText}\n\n` +
+      `👤 *Authorized Supervisor:* ${certReleaseSupervisorName || "N/A"} (ID: ${certReleaseSupervisorId || "N/A"})\n` +
+      `🌍 *Location:* DELSM Terminal Charging Locker Station`;
+  };
 
   const deviceTypes = useMemo(() => {
     const types = new Set<string>();
@@ -273,12 +300,87 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
                 >
                   Print Exception Cert
                 </button>
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(buildWhatsAppExceptionMessage())}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full bg-[#25D366] hover:bg-[#20BA56] hover:text-white text-white py-2.5 px-4 rounded-xl font-bold text-[11px] tracking-wider uppercase cursor-pointer no-underline text-center animate-fadeIn flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  Share WhatsApp
+                </a>
                 <button
                   type="button"
                   onClick={() => {
                     setIsShiftReleasedWithExceptions(false);
                     setReleasedExceptionsList([]);
                     setVerifiedHolders({});
+                  }}
+                  className="w-full bg-white hover:bg-slate-50 border border-slate-300 text-slate-755 py-2.5 px-4 rounded-xl font-bold text-[11px] tracking-wider uppercase cursor-pointer transition-all text-center animate-fadeIn"
+                >
+                  Reset Clearance
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : isShiftFullyReleased ? (
+          /* Standard Shift Release Completed Banner */
+          <div className="bg-emerald-50 border-2 border-emerald-500 rounded-3xl p-5 shadow-lg animate-scaleIn font-sans w-full">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+              <div className="lg:col-span-4 space-y-2">
+                <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider inline-flex shadow-3xs">
+                  <CheckCircle className="w-3.5 h-3.5 animate-bounce text-emerald-500 shrink-0" />
+                  <span>Standard Shift Release Secure</span>
+                </div>
+                <h3 className="font-extrabold text-[#071d49] text-base leading-snug tracking-tight">
+                  ALL SHIFT RELEASE CLEARANCE COMPLETE
+                </h3>
+                <p className="text-[12px] text-slate-650 font-semibold leading-relaxed">
+                  Authorized present by: <strong className="text-[#071d49] underline">{verifierName}</strong>{" "}
+                  <span className="font-mono bg-slate-200 text-slate-705 px-1.5 py-0.2 rounded text-[10.5px] ml-1 select-all">
+                    {verifierId}
+                  </span>
+                </p>
+              </div>
+
+              {/* Middle Column - Details */}
+              <div className="lg:col-span-5 bg-white/95 p-4 rounded-2xl border border-emerald-200 shadow-3xs space-y-2 self-stretch flex flex-col justify-center">
+                <span className="font-black text-[#071d49] block text-[10px] tracking-wider uppercase flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse shrink-0" />
+                  Hardware Shelf Fleet Stats (100% Present):
+                </span>
+                <p className="text-[11.5px] text-slate-600 font-medium">
+                  Verified all <strong className="text-emerald-700">{totalDevices} fleet devices</strong> are securely docked in the lockers. Zero outstanding custody sessions active.
+                </p>
+              </div>
+
+              {/* Right Column - Actions */}
+              <div className="lg:col-span-3 flex lg:flex-col sm:flex-row flex-col gap-2 w-full shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    alert(`Shift handover certificate printed and dispatched to terminal controller successfully. Certified by: ${verifierName} (${verifierId}).`);
+                  }}
+                  className="w-full bg-[#071d49] hover:bg-[#071d49]/90 text-white py-2.5 px-4 rounded-xl font-bold text-[11px] tracking-wider uppercase cursor-pointer border-none shadow-sm transition-all text-center animate-fadeIn"
+                >
+                  Print Clearance Log
+                </button>
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(buildWhatsAppReleaseMessage())}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full bg-[#25D366] hover:bg-[#20BA56] hover:text-white text-white py-2.5 px-4 rounded-xl font-bold text-[11px] tracking-wider uppercase cursor-pointer no-underline text-center animate-fadeIn flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  Share WhatsApp
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsShiftFullyReleased(false);
+                    setIsPhysicallyVerified(false);
+                    setVerifierName("");
+                    setVerifierId("");
                   }}
                   className="w-full bg-white hover:bg-slate-50 border border-slate-300 text-slate-755 py-2.5 px-4 rounded-xl font-bold text-[11px] tracking-wider uppercase cursor-pointer transition-all text-center animate-fadeIn"
                 >
@@ -307,13 +409,24 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
                   </p>
                 </div>
               </div>
-              <button
-                id="btn-shift-release-ok"
-                onClick={() => setIsReleaseModalOpen(true)}
-                className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-xl font-black text-sm tracking-widest uppercase shadow-md hover:shadow-xl transition-all transform hover:scale-[1.03] cursor-pointer border-none"
-              >
-                OK FOR SHIFT RELEASE
-              </button>
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(buildWhatsAppReleaseMessage())}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto bg-[#25D366] hover:bg-[#20BA56] hover:text-white text-white px-5 py-3 rounded-xl font-bold text-xs tracking-wider uppercase cursor-pointer no-underline flex items-center justify-center gap-1.5 shadow-sm transition-all transform hover:scale-[1.01]"
+                >
+                  <Share2 className="w-4 h-4 shrink-0" />
+                  Share WhatsApp
+                </a>
+                <button
+                  id="btn-shift-release-ok"
+                  onClick={() => setIsReleaseModalOpen(true)}
+                  className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-xl font-black text-sm tracking-widest uppercase shadow-md hover:shadow-xl transition-all transform hover:scale-[1.03] cursor-pointer border-none"
+                >
+                  OK FOR SHIFT RELEASE
+                </button>
+              </div>
             </div>
           ) : (
             /* Logistics DB is matched, but the physical counters are missing verification. Show "Verify Devices physically before shift release" button */
@@ -1031,9 +1144,19 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
             </div>
 
             <div className="bg-slate-50 border-t border-slate-150 p-4 flex gap-2.5 justify-end">
+              <a
+                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(buildWhatsAppReleaseMessage())}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-[#25D366] hover:bg-[#20BA56] hover:text-white text-white px-4 py-2 rounded-xl text-[11px] font-bold tracking-wider uppercase cursor-pointer no-underline flex items-center gap-1.5 shadow-sm transition-all"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                Share WhatsApp
+              </a>
               <button
                 onClick={() => {
                   alert(`Shift handover certificate printed and dispatched to terminal controller successfully. Certified by: ${verifierName} (${verifierId}).`);
+                  setIsShiftFullyReleased(true);
                   setIsReleaseModalOpen(false);
                 }}
                 className="bg-[#071d49] text-white hover:bg-[#071d49]/90 px-4 py-2 rounded-xl text-[11px] font-bold tracking-wider uppercase cursor-pointer"
@@ -1041,10 +1164,13 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
                 Print Clearance Log
               </button>
               <button
-                onClick={() => setIsReleaseModalOpen(false)}
+                onClick={() => {
+                  setIsShiftFullyReleased(true);
+                  setIsReleaseModalOpen(false);
+                }}
                 className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 px-4 py-2 rounded-xl text-[11px] font-bold tracking-wider uppercase cursor-pointer"
               >
-                Close desk
+                Confirm Release & Exit
               </button>
             </div>
           </div>
