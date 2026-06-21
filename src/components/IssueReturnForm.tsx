@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Asset, Agent, Transaction, AssetStatus } from "../types";
 import { ArrowUpRight, ArrowDownLeft, Calendar, FileText, Clock, HelpCircle, CheckCircle, AlertTriangle, Play, Smartphone, BookOpen, Camera, Search, User, Clipboard, Sliders, ArrowLeftRight } from "lucide-react";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { Html5Qrcode } from "html5-qrcode";
+
 import { db, assetsCol, transactionsCol } from "../firebase";
 import { HOURLY_SHIFTS } from "../utils/shiftConfig";
 
@@ -967,7 +969,7 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 
             <div className="bg-black/40 border border-slate-800 rounded-xl aspect-video relative overflow-hidden mb-4 flex flex-col items-center justify-center text-center p-4">
               <div className="absolute top-0 inset-x-0 h-0.5 bg-teal-400 shadow-md shadow-teal-400/50 animate-bounce" />
-              <VideoSimulator />
+            <VideoSimulator onScan={handleSimulatedScan} />
               <p className="text-[11px] text-slate-400 max-w-xs mt-3 relative z-10 font-sans">
                 Align standard flight crew barcode/QR sticker inside the viewfinder frame.
               </p>
@@ -1124,26 +1126,39 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
   );
 }
 
-function VideoSimulator() {
+function VideoSimulator({ onScan }: { onScan: (id: string) => void }) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const [cameraPermissionState, setCameraPermissionState] = useState<"pending" | "granted" | "denied">("pending");
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   useEffect(() => {
+    let html5QrCode: Html5Qrcode | null = null;
     let activeStream: MediaStream | null = null;
 
     async function enableCamera() {
       try {
         setCameraPermissionState("pending");
-        // Request video stream with preferred environmental camera (rear camera on mobile devices)
+        // Request video stream with preferred environmental camera
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment" }
         });
         activeStream = mediaStream;
         setCameraPermissionState("granted");
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-        }
+        
+        // Initialize scanner
+        html5QrCode = new Html5Qrcode("reader");
+        await html5QrCode.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText) => {
+            onScan(decodedText);
+            html5QrCode?.stop().catch(console.error);
+          },
+          (errorMessage) => {
+            // console.log(errorMessage);
+          }
+        );
+
       } catch (err: any) {
         console.error("Camera access failed:", err);
         setCameraPermissionState("denied");
@@ -1154,14 +1169,19 @@ function VideoSimulator() {
     enableCamera();
 
     return () => {
+      if (html5QrCode) {
+        html5QrCode.stop().catch(console.error);
+      }
       if (activeStream) {
         activeStream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, []);
+  }, [onScan]);
 
   return (
     <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-slate-950">
+      <div id="reader" className="hidden w-full h-full"></div>
+      
       {/* Render the video element unconditionally to prevent Ref race conditions */}
       <video
         ref={videoRef}
