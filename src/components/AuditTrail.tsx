@@ -1,8 +1,10 @@
 import React, { useState } from "react";
+import { selectBaseClass, selectStyle, optionClass } from "../lib/selectTheme";
 import { Transaction } from "../types";
 import { Search, Download, FileSpreadsheet, Printer, Activity, ClipboardList, RefreshCw, Calendar, Clock, RotateCcw, Trash2, Shield } from "lucide-react";
 import { db } from "../firebase";
 import { deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { DEVICE_TYPE_ORDER } from "../utils/deviceTypeSort";
 
 interface AuditTrailProps {
   transactions: Transaction[];
@@ -316,12 +318,13 @@ export default function AuditTrail({ transactions, loading, onRefresh, role = "S
             <select
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full px-3.5 py-2 text-xs border border-slate-200 bg-white rounded-xl focus:ring-1 focus:ring-indigo-500/50 focus:outline-none transition-all font-medium cursor-pointer"
+              className={`w-full h-10 ${selectBaseClass} text-xs`}
+              style={selectStyle}
             >
-              <option value="All">All types</option>
-              <option value="iPad">iPad</option>
-              <option value="Ingenico">Ingenico</option>
-              <option value="Mobile Phone">Mobile Phone</option>
+              <option value="All" className={optionClass}>All types</option>
+              {DEVICE_TYPE_ORDER.map(type => (
+                <option key={type} value={type} className={optionClass}>{type}</option>
+              ))}
             </select>
           </div>
 
@@ -330,12 +333,13 @@ export default function AuditTrail({ transactions, loading, onRefresh, role = "S
             <select
               value={selectedShift}
               onChange={(e) => setSelectedShift(e.target.value)}
-              className="w-full px-3.5 py-2 text-xs border border-slate-200 bg-white rounded-xl focus:ring-1 focus:ring-indigo-500/50 focus:outline-none transition-all font-medium cursor-pointer"
+              className={`w-full h-10 ${selectBaseClass} text-xs`}
+              style={selectStyle}
             >
-              <option value="All">All shifts</option>
-              <option value="Morning">Morning</option>
-              <option value="Afternoon">Afternoon</option>
-              <option value="Night">Night</option>
+              <option value="All" className={optionClass}>All shifts</option>
+              <option value="Morning" className={optionClass}>Morning</option>
+              <option value="Afternoon" className={optionClass}>Afternoon</option>
+              <option value="Night" className={optionClass}>Night</option>
             </select>
           </div>
         </div>
@@ -346,12 +350,13 @@ export default function AuditTrail({ transactions, loading, onRefresh, role = "S
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full px-3.5 py-2 text-xs border border-slate-200 bg-white rounded-xl focus:ring-1 focus:ring-indigo-500/50 focus:outline-none transition-all font-medium cursor-pointer"
+              className={`w-full h-10 ${selectBaseClass} text-xs`}
+              style={selectStyle}
             >
-              <option value="All">All states</option>
-              <option value="Issued">Issued</option>
-              <option value="Returned">Returned</option>
-              <option value="Missing / Not Returned">Missing / Not Returned</option>
+              <option value="All" className={optionClass}>All states</option>
+              <option value="Issued" className={optionClass}>Issued</option>
+              <option value="Returned" className={optionClass}>Returned</option>
+              <option value="Missing / Not Returned" className={optionClass}>Missing / Not Returned</option>
             </select>
           </div>
 

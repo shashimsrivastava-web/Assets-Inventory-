@@ -3,11 +3,12 @@ import { Asset, Agent, Transaction, AssetStatus, Handover } from "../types";
 import { 
   Key, ArrowUpRight, ArrowDownLeft, Clock, History, LogIn, 
   UserCheck, Smartphone, CheckCircle, AlertTriangle, ShieldAlert,
-  Sliders, Calendar, FileText, Send, Camera, ArrowLeftRight, LogOut
+  Sliders, Calendar, FileText, Send, Camera, ArrowLeftRight, LogOut, Search
 } from "lucide-react";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 
 import { db, assetsCol, transactionsCol, handoversCol } from "../firebase";
+import { sortDeviceTypes } from "../utils/deviceTypeSort";
 import { SmartphoneLogo } from "./Header";
 
 interface AgentPortalProps {
@@ -58,6 +59,19 @@ export default function AgentPortal({
   const [handoverSubmitting, setHandoverSubmitting] = useState(false);
   const [portalHandoverAssetId, setPortalHandoverAssetId] = useState("");
   const [portalHandoverToAgentId, setPortalHandoverToAgentId] = useState("");
+  const [searchValidationQuery, setSearchValidationQuery] = useState("");
+
+  const selectBaseClass = "bg-[#05162E] text-white border-2 border-transparent rounded-xl text-sm md:text-base font-bold shadow-[0_4px_10px_rgba(0,0,0,0.3)] hover:border-[#0066FF] hover:shadow-[0_0_15px_rgba(0,102,255,0.4)] focus:outline-none focus:border-[#0066FF] focus:ring-4 focus:ring-[#0066FF]/40 transition-all duration-300 cursor-pointer appearance-none outline-none";
+  const selectStyle = {
+    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+    backgroundPosition: 'right 1rem center',
+    backgroundRepeat: 'no-repeat',
+    backgroundSize: '1.5em 1.5em',
+    WebkitAppearance: 'none' as const,
+    appearance: 'none' as const,
+    paddingRight: '2.5rem'
+  };
+  const optionClass = "bg-[#05162E] text-white hover:bg-[#FFC72C] hover:text-[#05162E] font-medium";
 
   // Check physical sessionStorage to keep agent logged in across hot reloads if preferred
   useEffect(() => {
@@ -427,7 +441,7 @@ export default function AgentPortal({
   const deviceTypes = useMemo(() => {
     const types = new Set<string>();
     availableAssets.forEach(a => types.add(a.type));
-    return ["All", ...Array.from(types).sort()];
+    return ["All", ...sortDeviceTypes(Array.from(types))];
   }, [availableAssets]);
 
   const filteredAssets = useMemo(() => {
@@ -473,147 +487,164 @@ export default function AgentPortal({
 
       {!currentAgent ? (
         /* Portal Login Panel Container */
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl max-w-lg mx-auto my-8 animate-fadeIn">
-          <div className="text-center mb-6">
-            <div className="flex justify-center mb-5">
-              <div className="shrink-0">
-                <SmartphoneLogo className="w-16 h-16" color="#071d49" bgColor="#ffffff" />
+        <div className="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-[2rem] p-1 sm:p-2 shadow-[0_20px_50px_rgba(99,102,241,0.3)] hover:shadow-[0_20px_60px_rgba(99,102,241,0.5)] max-w-lg mx-auto my-8 transition-all duration-500 animate-fadeIn">
+          <div className="bg-white/95 backdrop-blur-3xl rounded-[1.5rem] p-6 sm:p-8 shadow-inner">
+            <div className="text-center mb-6">
+              <div className="flex justify-center mb-5">
+                <div className="shrink-0 bg-indigo-50 w-20 h-20 rounded-[2rem] flex justify-center items-center shadow-[0_10px_20px_rgba(99,102,241,0.2)]">
+                  <SmartphoneLogo className="w-12 h-12" color="#6366f1" bgColor="transparent" />
+                </div>
               </div>
-            </div>
-            <div className="w-12 h-12 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-3 text-slate-700 shadow-3xs">
-              <Key className="w-5 h-5 text-[#071d49]" />
-            </div>
-            <h2 className="text-lg font-bold text-slate-900">Roster Validation Gateway</h2>
-            <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-              Please enter your registered shift credentials as enrolled in the system.
-            </p>
-          </div>
-
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
-            <div>
-              <label className="block text-[11px] uppercase font-bold text-slate-500 mb-1.5 font-sans">
-                Employee ID (Username)
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. EMP001"
-                value={employeeIdInput}
-                onChange={(e) => setEmployeeIdInput(e.target.value)}
-                className="w-full px-4 py-2.5 border border-slate-200 bg-white rounded-xl text-sm font-medium focus:ring-1 focus:ring-indigo-500/50 focus:outline-none transition-all uppercase"
-                required
-              />
+              <h2 className="text-xl font-black text-indigo-950">Roster Validation Gateway</h2>
+              <p className="text-xs text-indigo-500 font-medium mt-2 max-w-xs mx-auto">
+                Please enter your registered shift credentials as enrolled in the system.
+              </p>
             </div>
 
-            <div>
-              <label className="block text-[11px] uppercase font-bold text-slate-500 mb-1.5 font-sans">
-                Registered Full Name
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Daniel Courier"
-                value={fullNameInput}
-                onChange={(e) => setFullNameInput(e.target.value)}
-                className="w-full px-4 py-2.5 border border-slate-200 bg-white rounded-xl text-sm font-medium focus:ring-1 focus:ring-indigo-500/50 focus:outline-none transition-all"
-                required
-              />
-            </div>
-
-            {loginError && (
-              <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs flex items-start gap-2 animate-pulse">
-                <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{loginError}</span>
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[11px] uppercase font-bold text-indigo-800 mb-1.5 font-sans tracking-wide">
+                  Employee ID (Username)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. EMP001"
+                  value={employeeIdInput}
+                  onChange={(e) => setEmployeeIdInput(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-indigo-100 bg-white rounded-2xl text-sm font-bold text-slate-800 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 focus:outline-none transition-all uppercase shadow-sm"
+                  required
+                />
               </div>
-            )}
 
-            <button
-              type="submit"
-              className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs tracking-wider uppercase transition shadow-sm cursor-pointer"
-            >
-              Authenticate & Access Desk ➔
-            </button>
-          </form>
-
-          {/* Quick login validation help block */}
-          <div className="mt-8 pt-6 border-t border-slate-100 bg-slate-50/50 p-4 rounded-2xl">
-            <h4 className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-2.5 flex items-center gap-1">
-              <Sliders className="w-3 h-3 text-slate-400" />
-              Quick Validation Test Accounts
-            </h4>
-            {agents.length === 0 ? (
-              <p className="text-[10px] text-slate-400 italic">No enrolled agents. Create one in the Roster tab first.</p>
-            ) : (
-              <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-                {agents.slice(0, 4).map((agentObj) => (
-                  <button
-                    key={agentObj.id}
-                    type="button"
-                    onClick={() => {
-                      setEmployeeIdInput(agentObj.id);
-                      setFullNameInput(agentObj.name);
-                    }}
-                    className="w-full text-left p-1.5 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 rounded-lg text-[11px] text-slate-650 bg-white shadow-2xs transition-all flex justify-between items-center"
-                  >
-                    <span>ID: <strong className="font-mono text-slate-900">{agentObj.id}</strong> · {agentObj.name}</span>
-                    <span className="text-[9px] bg-slate-100 font-bold px-1.5 text-slate-500 rounded">{agentObj.department || "Ops"}</span>
-                  </button>
-                ))}
+              <div>
+                <label className="block text-[11px] uppercase font-bold text-indigo-800 mb-1.5 font-sans tracking-wide">
+                  Registered Full Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Daniel Courier"
+                  value={fullNameInput}
+                  onChange={(e) => setFullNameInput(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-indigo-100 bg-white rounded-2xl text-sm font-bold text-slate-800 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 focus:outline-none transition-all shadow-sm"
+                  required
+                />
               </div>
-            )}
+
+              {loginError && (
+                <div className="p-3 bg-rose-50 border-2 border-rose-200 rounded-2xl text-rose-700 text-xs font-bold flex items-start gap-2 shadow-[0_5px_10px_rgba(244,63,94,0.1)]">
+                  <ShieldAlert className="w-5 h-5 shrink-0" />
+                  <span>{loginError}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-4 mt-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold rounded-2xl text-sm tracking-wider uppercase transition-all duration-300 shadow-[0_10px_20px_rgba(99,102,241,0.4)] hover:shadow-[0_15px_30px_rgba(99,102,241,0.6)] hover:scale-105 cursor-pointer border-0"
+              >
+                Authenticate & Access Desk ➔
+              </button>
+            </form>
+
+            {/* Quick login validation help block */}
+            <div className="mt-8 pt-6 border-t border-indigo-50 bg-indigo-50/50 p-5 rounded-3xl">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                <h4 className="text-[10px] uppercase font-bold text-indigo-500 tracking-wider flex items-center gap-1">
+                  <Sliders className="w-3 h-3" />
+                  Quick Validation Test Accounts
+                </h4>
+                <div className="w-full sm:w-auto relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-indigo-300" />
+                  <input
+                    type="text"
+                    placeholder="Search name..."
+                    value={searchValidationQuery}
+                    onChange={(e) => setSearchValidationQuery(e.target.value)}
+                    className="w-full sm:w-48 pl-8 pr-3 py-1.5 bg-white border border-indigo-100 rounded-xl text-xs font-medium text-slate-700 placeholder-indigo-300 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all shadow-sm"
+                  />
+                </div>
+              </div>
+              {agents.length === 0 ? (
+                <p className="text-[10px] text-slate-400 italic font-medium">No enrolled agents. Create one in the Roster tab first.</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {agents
+                    .filter((a) => a.name.toLowerCase().includes(searchValidationQuery.toLowerCase()))
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((agentObj) => (
+                    <button
+                      key={agentObj.id}
+                      type="button"
+                      onClick={() => {
+                        setEmployeeIdInput(agentObj.id);
+                        setFullNameInput(agentObj.name);
+                      }}
+                      className="w-full text-left p-2.5 bg-white hover:bg-indigo-50 border-2 border-transparent hover:border-indigo-200 rounded-2xl text-[11px] text-slate-700 font-medium shadow-sm hover:shadow-[0_5px_15px_rgba(99,102,241,0.15)] hover:scale-[1.02] transition-all flex justify-between items-center group cursor-pointer"
+                    >
+                      <span className="group-hover:text-indigo-800 transition-colors">ID: <strong className="font-mono text-slate-900 group-hover:text-indigo-900">{agentObj.id}</strong> · {agentObj.name}</span>
+                      <span className="text-[9px] bg-indigo-100 font-bold px-2 py-0.5 text-indigo-600 rounded-lg">{agentObj.department || "Ops"}</span>
+                    </button>
+                  ))}
+                  {agents.filter((a) => a.name.toLowerCase().includes(searchValidationQuery.toLowerCase())).length === 0 && (
+                    <p className="text-[10px] text-slate-400 italic font-medium py-2 text-center">No matching accounts found.</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       ) : (
         /* Authenticated Agent Workspace */
         <div className="space-y-6 animate-fadeIn">
           {/* Welcome User Banner */}
-          <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="p-6 bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 border border-transparent rounded-[2rem] shadow-[0_15px_40px_rgba(236,72,153,0.3)] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all duration-300 hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)]">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
-                <UserCheck className="w-5 h-5" />
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-xl border border-white/30 rounded-2xl flex items-center justify-center text-white shadow-inner">
+                <UserCheck className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-bold text-sm text-slate-900">
+                <h3 className="font-extrabold text-base text-white">
                   Welcome to Your Shift, {currentAgent.name}
                 </h3>
-                <p className="text-xs text-slate-500">
-                  Employee Ref: <strong className="font-mono uppercase text-indigo-600">{currentAgent.id}</strong> · Team Division: <span className="font-medium">{currentAgent.department || "General Shift Operations"}</span>
+                <p className="text-xs text-pink-100 font-medium mt-0.5">
+                  Employee Ref: <strong className="font-mono uppercase text-white bg-black/10 px-1 rounded">{currentAgent.id}</strong> · Team Division: <span className="font-bold">{currentAgent.department || "General Shift Operations"}</span>
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-[10px] text-slate-500 flex items-center gap-1.5">
-                <Clock className="w-3 h-3 text-slate-400" />
-                Active Shift: <strong className="text-slate-800 font-bold uppercase">{activeShift}</strong>
+            <div className="flex items-center gap-3">
+              <div className="bg-black/10 backdrop-blur-md border border-white/20 rounded-xl px-3 py-1.5 text-[11px] text-pink-50 flex items-center gap-2 shadow-inner">
+                <Clock className="w-4 h-4 text-pink-200" />
+                Active Shift: <strong className="text-white font-extrabold uppercase">{activeShift}</strong>
               </div>
               <button
                 onClick={handleSignOut}
-                className="flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 border border-rose-200 hover:border-rose-300 rounded-lg px-2.5 py-1 text-[11px] font-bold shadow-3xs hover:shadow-2xs cursor-pointer transition-all"
+                className="flex items-center gap-1.5 bg-white text-rose-500 hover:text-rose-600 hover:bg-rose-50 border-0 rounded-xl px-3 py-1.5 text-xs font-extrabold shadow-[0_5px_15px_rgba(0,0,0,0.15)] hover:shadow-[0_10px_20px_rgba(0,0,0,0.25)] hover:scale-105 cursor-pointer transition-all duration-300"
                 id="agent-signout-btn"
               >
-                <LogOut className="w-3 h-3 shrink-0" />
+                <LogOut className="w-4 h-4 shrink-0" />
                 Sign Out
               </button>
             </div>
           </div>
 
           {/* Sub Tab Navigation */}
-          <div className="flex border-b border-slate-200">
+          <div className="flex flex-wrap gap-2 pb-2">
             <button
               onClick={() => setDeskTab("operations")}
-              className={`pb-3 px-4 text-xs font-bold tracking-wide border-b-2 transition-all cursor-pointer ${
+              className={`py-2.5 px-5 rounded-xl text-xs font-bold tracking-wide transition-all duration-300 cursor-pointer border-0 shadow-sm ${
                 deskTab === "operations"
-                  ? "border-indigo-600 text-indigo-700"
-                  : "border-transparent text-slate-500 hover:text-slate-850"
+                  ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-[0_5px_15px_rgba(99,102,241,0.3)] scale-[1.02]"
+                  : "bg-white text-slate-500 hover:text-indigo-600 hover:scale-[1.02]"
               }`}
             >
               📋 Issue & Return operations
             </button>
             <button
               onClick={() => setDeskTab("history")}
-              className={`pb-3 px-4 text-xs font-bold tracking-wide border-b-2 transition-all cursor-pointer ${
+              className={`py-2.5 px-5 rounded-xl text-xs font-bold tracking-wide transition-all duration-300 cursor-pointer border-0 shadow-sm ${
                 deskTab === "history"
-                  ? "border-indigo-600 text-indigo-700"
-                  : "border-transparent text-slate-500 hover:text-slate-850"
+                  ? "bg-gradient-to-r from-orange-400 to-pink-500 text-white shadow-[0_5px_15px_rgba(249,115,22,0.3)] scale-[1.02]"
+                  : "bg-white text-slate-500 hover:text-orange-500 hover:scale-[1.02]"
               }`}
             >
               <History className="w-3.5 h-3.5 inline mr-1" />
@@ -691,11 +722,12 @@ export default function AgentPortal({
               {/* SECTION: ASSIGNED ASSETS IN CUSTODY */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
                 <div>
-                  <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider pb-2 border-b border-slate-100 mb-4 flex justify-between items-center">
-                    <span>Devices Currently in Your Custody</span>
-                    <span className="bg-indigo-50 border border-indigo-100 text-indigo-700 font-mono text-[9px] font-bold px-2 py-0.5 rounded-full">
-                      {myDevicesHeld.length} Device(s)
-                    </span>
+                  <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider pb-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <span className="text-sm font-bold text-slate-800">Assigned Devices</span>
+                    <button className="bg-gradient-to-r from-[#0066FF] to-[#0052cc] text-white shadow-[0_4px_15px_rgba(0,102,255,0.5)] border-2 border-[#FFC72C] px-5 py-2.5 rounded-xl text-lg font-black tracking-wide uppercase group flex items-center gap-3 cursor-default hover:scale-105 transition-all">
+                      <span className="bg-[#DC143C] text-white font-bold px-3 py-1 rounded-lg text-2xl animate-pulse">{myDevicesHeld.length}</span>
+                      <span>IN CUSTODY</span>
+                    </button>
                   </h3>
 
                   {myDevicesHeld.length === 0 ? (
@@ -920,7 +952,7 @@ export default function AgentPortal({
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-4">
                   <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
-                    Assigned Device Desk Checkout
+                    Pick Device from Office
                   </h3>
                 </div>
 
@@ -932,8 +964,8 @@ export default function AgentPortal({
                   </div>
                 ) : (
                   <form onSubmit={handleSelfIssueSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                      <div className="flex flex-col justify-end h-full">
                         <label className="block text-xs font-semibold text-slate-500 mb-1.5">
                           Filter by Device Type
                         </label>
@@ -943,27 +975,29 @@ export default function AgentPortal({
                             setSelectedDeviceType(e.target.value);
                             setSelectedAssetId("");
                           }}
-                          className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-xs font-medium text-slate-700 cursor-pointer"
+                          className={`w-full h-10 ${selectBaseClass} text-xs md:text-sm`}
+                          style={selectStyle}
                         >
                           {deviceTypes.map(type => (
-                            <option key={type} value={type}>{type}</option>
+                            <option key={type} value={type} className={optionClass}>{type}</option>
                           ))}
                         </select>
                       </div>
 
-                      <div>
+                      <div className="flex flex-col justify-end h-full">
                         <label className="block text-xs font-semibold text-slate-500 mb-1.5">
                           Choose Available Device from Cabinet
                         </label>
                         <select
                           value={selectedAssetId}
                           onChange={(e) => setSelectedAssetId(e.target.value)}
-                          className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-xs font-medium text-slate-700 uppercase cursor-pointer"
+                          className={`w-full h-10 uppercase ${selectBaseClass} font-mono text-xs md:text-sm`}
+                          style={selectStyle}
                           required
                         >
-                          <option value="">-- Choose hardware item --</option>
+                          <option value="" className={optionClass}>-- Choose hardware item --</option>
                           {filteredAssets.map((asset) => (
-                            <option key={asset.id} value={asset.id}>
+                            <option key={asset.id} value={asset.id} className={optionClass}>
                               [{asset.id}] - {asset.name} ({asset.type})
                             </option>
                           ))}
@@ -976,11 +1010,11 @@ export default function AgentPortal({
                       <span className="block text-[10px] uppercase font-bold text-slate-400 mb-2 tracking-wider">
                         Quick Pick Desk Cards:
                       </span>
-                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                      <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
                         {filteredAssets.length === 0 ? (
                           <span className="text-[10px] text-slate-400 italic">No devices match selected type.</span>
                         ) : (
-                          filteredAssets.slice(0, 6).map((asset) => (
+                          filteredAssets.map((asset) => (
                             <button
                               key={asset.id}
                               type="button"
@@ -1061,12 +1095,13 @@ export default function AgentPortal({
                       <select
                         value={portalHandoverAssetId}
                         onChange={(e) => setPortalHandoverAssetId(e.target.value)}
-                        className="w-full px-3.5 py-2.5 border border-slate-200 bg-white rounded-xl text-xs font-semibold text-slate-800 cursor-pointer focus:ring-1 focus:ring-indigo-500/50 focus:outline-none"
+                        className={`w-full h-11 ${selectBaseClass} text-xs md:text-sm font-mono`}
+                        style={selectStyle}
                         required
                       >
-                        <option value="">-- Choose your device in custody --</option>
+                        <option value="" className={optionClass}>-- Choose your device in custody --</option>
                         {myDevicesHeld.map((asset) => (
-                          <option key={asset.id} value={asset.id}>
+                          <option key={asset.id} value={asset.id} className={optionClass}>
                             [{asset.id}] - {asset.name} ({asset.type})
                           </option>
                         ))}

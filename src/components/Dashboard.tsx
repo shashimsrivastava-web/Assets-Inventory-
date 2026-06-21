@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { selectBaseClass, selectStyle, optionClass } from "../lib/selectTheme";
 import { Asset, Agent, Transaction, AssetStatus } from "../types";
 import { Tablet, Smartphone, CreditCard, Shield, Laptop, AlertCircle, FileSpreadsheet, Search, CheckCircle, RefreshCw, AlertTriangle, Layers, Clock, HelpCircle, Layout, Scan, Camera } from "lucide-react";
+import { sortDeviceTypes } from "../utils/deviceTypeSort";
 
 interface DashboardProps {
   assets: Asset[];
@@ -13,6 +15,12 @@ interface DashboardProps {
 export default function Dashboard({ assets, agents, transactions, loading, onRefresh }: DashboardProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDeviceType, setSelectedDeviceType] = useState("All");
+
+  const deviceTypes = useMemo(() => {
+    const types = new Set<string>();
+    assets.forEach(a => types.add(a.type));
+    return ["All", ...sortDeviceTypes(Array.from(types))];
+  }, [assets]);
 
   // Filter conditions
   const matchesSearchAndType = (device: Asset) => {
@@ -332,14 +340,12 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
           <select
             value={selectedDeviceType}
             onChange={(e) => setSelectedDeviceType(e.target.value)}
-            className="px-3.5 py-2 text-xs border border-slate-200 bg-white rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-slate-700 cursor-pointer font-semibold"
+            className={`${selectBaseClass} w-auto h-10 px-4`}
+            style={selectStyle}
           >
-            <option value="All">All Types</option>
-            <option value="iPad">iPads / PDAs</option>
-            <option value="Ingenico">Ingenico POS</option>
-            <option value="Mobile Phone">Mobile Phones</option>
-            <option value="Scanner">Scanners</option>
-            <option value="Hold Camera Phone">Hold Camera Phones</option>
+            {deviceTypes.map(type => (
+              <option key={type} value={type} className={optionClass}>{type}</option>
+            ))}
           </select>
 
           <button

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { selectBaseClass, selectStyle, optionClass } from "../lib/selectTheme";
 import { Asset, AssetStatus } from "../types";
 import { Plus, Edit2, Trash2, Smartphone, Tablet, CreditCard, Layers, Tag, Eye, RefreshCw, Printer, UploadCloud, FileSpreadsheet, Scan, Camera, Image, Link, Settings, X, Wrench, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
 import { addDoc, deleteDoc, doc, setDoc, onSnapshot } from "firebase/firestore";
 import { assetsCol, deviceTypesCol } from "../firebase";
+import { sortDeviceTypes } from "../utils/deviceTypeSort";
 import { read, utils, writeFile } from "xlsx";
 
 interface AssetMasterProps {
@@ -130,13 +132,19 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
         }
       });
       
-      const sorted = list.sort((a, b) => a.name.localeCompare(b.name));
+      const sorted = list.sort((a, b) => {
+        const order = sortDeviceTypes([a.name, b.name]);
+        return order[0] === a.name ? -1 : 1;
+      });
       if (sorted.length === 0) {
         // Fallback to initial defaults if collection is empty
         const defaults = [
-          { id: "ipad", name: "iPad" },
+          { id: "pda@ops", name: "PDA@OPS" },
+          { id: "ipad", name: "IPAD" },
+          { id: "ipad-mini", name: "IPAD Mini (ALS)" },
           { id: "ingenico-pos", name: "Ingenico POS" },
           { id: "mobile-phone", name: "Mobile Phone" },
+          { id: "hold-camera", name: "Hold Camera Phone" },
           { id: "brs-scanner", name: "BRS Scanner" }
         ];
         console.log("No custom categories in database, showing default categories:", defaults);
@@ -1128,21 +1136,25 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-sm font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer transition-all text-slate-705"
+                className={`w-full h-10 ${selectBaseClass}`}
+                style={selectStyle}
               >
                 {deviceTypes.length > 0 ? (
                   deviceTypes.map((dt) => (
-                    <option key={dt.id} value={dt.name}>{dt.name}</option>
+                    <option key={dt.id} value={dt.name} className={optionClass}>{dt.name}</option>
                   ))
                 ) : (
                   <>
-                    <option value="iPad">iPad</option>
-                    <option value="Ingenico POS">Ingenico POS</option>
-                    <option value="Mobile Phone">Mobile Phone</option>
-                    <option value="BRS Scanner">BRS Scanner</option>
+                    <option value="PDA@OPS" className={optionClass}>PDA@OPS</option>
+                    <option value="IPAD" className={optionClass}>IPAD</option>
+                    <option value="IPAD Mini (ALS)" className={optionClass}>IPAD Mini (ALS)</option>
+                    <option value="Ingenico POS" className={optionClass}>Ingenico POS</option>
+                    <option value="Mobile Phone" className={optionClass}>Mobile Phone</option>
+                    <option value="Hold Camera Phone" className={optionClass}>Hold Camera Phone</option>
+                    <option value="BRS Scanner" className={optionClass}>BRS Scanner</option>
                   </>
                 )}
-                <option value="Other">Other / Custom</option>
+                <option value="Other" className={optionClass}>Other / Custom</option>
               </select>
             </div>
 
@@ -1179,14 +1191,15 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as AssetStatus)}
-                className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-sm font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer transition-all text-slate-705"
+                className={`w-full h-10 ${selectBaseClass}`}
+                style={selectStyle}
                 disabled={role !== "Admin"}
               >
-                <option value={AssetStatus.IN_OFFICE}>In Office / Available</option>
-                <option value={AssetStatus.ISSUED}>Issued</option>
-                <option value={AssetStatus.RETURNED}>Returned</option>
-                <option value={AssetStatus.NOT_TAKEN}>Not Taken</option>
-                <option value={AssetStatus.MISSING}>Missing / Not Returned</option>
+                <option value={AssetStatus.IN_OFFICE} className={optionClass}>In Office / Available</option>
+                <option value={AssetStatus.ISSUED} className={optionClass}>Issued</option>
+                <option value={AssetStatus.RETURNED} className={optionClass}>Returned</option>
+                <option value={AssetStatus.NOT_TAKEN} className={optionClass}>Not Taken</option>
+                <option value={AssetStatus.MISSING} className={optionClass}>Missing / Not Returned</option>
               </select>
               {role !== "Admin" && (
                 <span className="text-[10px] text-slate-450 mt-1 block">Only Admins can override manual status.</span>
@@ -1325,13 +1338,14 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="px-3 py-1.5 border border-slate-200 bg-white rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500/50 cursor-pointer transition-all text-slate-750 min-w-[140px]"
+            className={`${selectBaseClass} min-w-[140px] px-3 h-8 text-[11px]`}
+            style={{ ...selectStyle, paddingRight: '2rem', backgroundSize: '1.2em 1.2em', backgroundPosition: 'right 0.5rem center' }}
           >
-            <option value="All">All Device Types</option>
+            <option value="All" className={optionClass}>All Device Types</option>
             {deviceTypes.map((dt) => (
-              <option key={dt.id} value={dt.name}>{dt.name}</option>
+              <option key={dt.id} value={dt.name} className={optionClass}>{dt.name}</option>
             ))}
-            <option value="Other">Other / Custom</option>
+            <option value="Other" className={optionClass}>Other / Custom</option>
           </select>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 
 import { db, assetsCol, transactionsCol } from "../firebase";
 import { HOURLY_SHIFTS } from "../utils/shiftConfig";
+import { sortDeviceTypes } from "../utils/deviceTypeSort";
 
 interface IssueReturnFormProps {
   assets: Asset[];
@@ -54,6 +55,18 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
     timestamp: number;
     durationMinutes?: number;
   } | null>(null);
+
+  const selectBaseClass = "bg-[#05162E] text-white border-2 border-transparent rounded-xl text-sm md:text-base font-bold shadow-[0_4px_10px_rgba(0,0,0,0.3)] hover:border-[#0066FF] hover:shadow-[0_0_15px_rgba(0,102,255,0.4)] focus:outline-none focus:border-[#0066FF] focus:ring-4 focus:ring-[#0066FF]/40 transition-all duration-300 cursor-pointer appearance-none outline-none";
+  const selectStyle = {
+    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+    backgroundPosition: 'right 1rem center',
+    backgroundRepeat: 'no-repeat',
+    backgroundSize: '1.5em 1.5em',
+    WebkitAppearance: 'none' as const,
+    appearance: 'none' as const,
+    paddingRight: '2.5rem'
+  };
+  const optionClass = "bg-[#05162E] text-white hover:bg-[#FFC72C] hover:text-[#05162E] font-medium";
 
   // Populate form with current shift when shift updates
   useEffect(() => {
@@ -428,7 +441,7 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
   const deviceTypes = useMemo(() => {
     const types = new Set<string>();
     availableAssetsForIssue.forEach(a => types.add(a.type));
-    return ["All", ...Array.from(types).sort()];
+    return ["All", ...sortDeviceTypes(Array.from(types))];
   }, [availableAssetsForIssue]);
 
   const filteredAssetsForIssue = useMemo(() => {
@@ -437,33 +450,34 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
   }, [availableAssetsForIssue, selectedDeviceType]);
 
   return (
-    <div id="issue-return-control" className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-md flex flex-col">
-      
+    <div id="issue-return-control" className="bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(236,72,153,0.3)] flex flex-col p-1 sm:p-2 transition-all duration-500 hover:shadow-[0_20px_60px_rgba(236,72,153,0.5)]">
+      <div className="bg-white/95 backdrop-blur-3xl rounded-[1.5rem] overflow-hidden flex flex-col shadow-inner w-full flex-1">
       {/* Selected Agent Header Search Panel - Premium Dark Slate Indigo Design */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-950 text-white border-b border-indigo-900/50 p-4 sm:p-6 flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
+      <div className="bg-transparent text-slate-900 border-b border-indigo-900/10 p-4 sm:p-6 flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
         <div className="flex-1 min-w-0">
-          <label className="block text-[11px] uppercase font-bold text-slate-300 mb-2 tracking-widest font-sans flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
+          <label className="block text-[11px] uppercase font-bold text-pink-600 mb-2 tracking-widest font-sans flex items-center gap-1.5 drop-shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.8)] animate-pulse inline-block" />
             1. Select ACTIVE SHIFT AGENT *
           </label>
           <div className="flex gap-2 w-full">
             <select
               value={selectedAgentId}
               onChange={(e) => handleSelectAgent(e.target.value)}
-              className="flex-1 h-12 px-4 border border-slate-705 bg-slate-900 text-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-indigo-400 font-bold cursor-pointer transition-all placeholder-slate-400 shadow-inner"
+              className={`flex-1 h-12 ${selectBaseClass}`}
+              style={selectStyle}
             >
-              <option value="" className="text-slate-900 font-sans">-- Click here to select Active Agent --</option>
+              <option value="" className={optionClass}>-- Click here to select Active Agent --</option>
               {agents.map((agent) => (
-                <option key={agent.id} value={agent.id} className="text-slate-950 font-sans font-medium">
+                <option key={agent.id} value={agent.id} className={optionClass}>
                   👤 {agent.name} ({agent.id}) - {agent.department || "Operations"}
-                </option>
+                 </option>
               ))}
             </select>
             {selectedAgentId && (
               <button
                 type="button"
                 onClick={() => setSelectedAgentId("")}
-                className="px-4 text-sm font-extrabold bg-slate-800 hover:bg-rose-600 text-slate-200 hover:text-white border border-slate-700 hover:border-rose-600 rounded-xl transition-all cursor-pointer h-12 flex items-center justify-center shrink-0 shadow-sm"
+                className="px-6 text-sm font-extrabold bg-gradient-to-r from-pink-500 to-rose-400 hover:from-rose-400 hover:to-pink-500 text-white rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(244,63,94,0.5)] cursor-pointer h-12 flex items-center justify-center shrink-0 shadow-md border-0"
               >
                 Clear
               </button>
@@ -472,19 +486,19 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
         </div>
 
         {currentAgent && (
-          <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-xl p-4 min-w-[260px] text-left md:text-right shrink-0 shadow-lg relative overflow-hidden flex flex-col justify-center">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl -mr-6 -mt-6 pointer-events-none" />
-            <h5 className="text-sm font-extrabold tracking-tight text-white flex items-center gap-2 md:justify-end">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
+          <div className="bg-gradient-to-br from-purple-100 to-pink-50 border-2 border-pink-200 rounded-2xl p-4 min-w-[260px] text-left md:text-right shrink-0 shadow-lg relative overflow-hidden flex flex-col justify-center transition-all duration-300 hover:shadow-[0_0_20px_rgba(236,72,153,0.3)] hover:scale-105">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-pink-300 to-purple-300 rounded-full blur-2xl -mr-10 -mt-10 opacity-50 pointer-events-none" />
+            <h5 className="text-sm font-extrabold tracking-tight text-purple-900 flex items-center gap-2 md:justify-end">
+              <span className="w-2 h-2 rounded-full bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.8)] animate-pulse" />
               {currentAgent.name}
             </h5>
-            <p className="text-xs text-indigo-200 font-bold mt-0.5">{currentAgent.id} · {currentAgent.department || "Operations"}</p>
-            <div className="mt-2.5 flex items-center justify-start md:justify-end gap-1.5 text-xs text-teal-300 font-black tracking-wide">
-              <Smartphone className="w-4 h-4 text-teal-400" />
+            <p className="text-[11px] text-purple-700 font-bold mt-1 uppercase tracking-wider">{currentAgent.id} · {currentAgent.department || "Operations"}</p>
+            <div className="mt-3 flex items-center justify-start md:justify-end gap-1.5 text-xs text-pink-700 font-black tracking-wide">
+              <Smartphone className="w-4 h-4 text-pink-600 drop-shadow-sm" />
               {agentHeldAssets.length === 0 ? (
-                <span className="text-slate-350 font-medium">No Devices Checked Out</span>
+                <span className="text-slate-500 font-bold">No Devices Checked Out</span>
               ) : (
-                <span className="bg-teal-950/60 text-teal-300 px-2 py-0.5 rounded-lg border border-teal-850">
+                <span className="bg-gradient-to-r from-pink-500 to-purple-600 text-white px-2.5 py-1 rounded-xl shadow-md border border-pink-400">
                   Holds {agentHeldAssets.length} Active Device{agentHeldAssets.length > 1 ? "s" : ""}
                 </span>
               )}
@@ -494,17 +508,17 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
       </div>
 
       {/* Top Slider Navigation Tabs - responsive layout grid */}
-      <div className="grid grid-cols-3 gap-1.5 p-1.5 bg-slate-200/60 border-b border-slate-250 font-bold">
+      <div className="grid grid-cols-3 gap-2 p-3 bg-purple-50/50 border-b border-purple-100 font-bold">
         <button
           id="tab-select-issue"
           onClick={() => setActiveTab("issue")}
-          className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2.5 py-3.5 rounded-xl text-xs sm:text-sm tracking-wide transition-all shadow-3xs cursor-pointer ${
+          className={`group flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2.5 py-4 rounded-2xl text-xs sm:text-sm tracking-wide transition-all duration-300 cursor-pointer ${
             activeTab === "issue"
-              ? "bg-emerald-600 text-white shadow-md border-b-2 border-emerald-700 font-black animate-scaleIn"
-              : "bg-white/80 text-slate-600 hover:text-slate-900 hover:bg-white border border-slate-300/40"
+              ? "bg-gradient-to-r from-emerald-400 to-teal-500 text-white shadow-[0_10px_20px_rgba(52,211,153,0.4)] scale-[1.02] border-0"
+              : "bg-white text-slate-500 hover:text-emerald-500 shadow-sm hover:shadow-md border border-slate-100"
           }`}
         >
-          <ArrowUpRight className="w-4 h-4 text-emerald-500 shrink-0" />
+          <ArrowUpRight className={`w-5 h-5 transition-transform duration-300 ${activeTab === "issue" ? "text-white" : "text-emerald-400 group-hover:-translate-y-1 group-hover:translate-x-1"}`} />
           <span className="text-center font-bold">Issue Device</span>
         </button>
 
@@ -516,16 +530,16 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
               setActiveTab("return");
             }
           }}
-          className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2.5 py-3.5 rounded-xl text-xs sm:text-sm tracking-wide transition-all shadow-3xs ${
+          className={`group flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2.5 py-4 rounded-2xl text-xs sm:text-sm tracking-wide transition-all duration-300 ${
             (!selectedAgentId || agentHeldAssets.length === 0)
-              ? "opacity-35 cursor-not-allowed bg-slate-100/50 text-slate-400 border border-slate-200"
+              ? "opacity-50 cursor-not-allowed bg-slate-100/50 text-slate-400 border border-slate-200"
               : activeTab === "return"
-              ? "bg-indigo-600 text-white shadow-md border-b-2 border-indigo-700 font-black cursor-pointer"
-              : "bg-white/80 text-slate-600 hover:text-indigo-600 hover:bg-white border border-slate-300/40 cursor-pointer"
+              ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-[0_10px_20px_rgba(99,102,241,0.4)] scale-[1.02] border-0 cursor-pointer"
+              : "bg-white text-slate-500 hover:text-indigo-500 shadow-sm hover:shadow-md border border-slate-100 cursor-pointer"
           }`}
           title={(!selectedAgentId || agentHeldAssets.length === 0) ? "Return options are only available when the selected agent holds active devices." : ""}
         >
-          <ArrowDownLeft className="w-4 h-4 text-indigo-500 shrink-0" />
+          <ArrowDownLeft className={`w-5 h-5 transition-transform duration-300 ${activeTab === "return" ? "text-white" : "text-indigo-400 group-hover:translate-y-1 group-hover:-translate-x-1"}`} />
           <span className="text-center font-bold">Return {agentHeldAssets.length > 0 && `(${agentHeldAssets.length})`}</span>
         </button>
 
@@ -537,21 +551,21 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
               setActiveTab("handover");
             }
           }}
-          className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2.5 py-3.5 rounded-xl text-xs sm:text-sm tracking-wide transition-all shadow-3xs ${
+          className={`group flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2.5 py-4 rounded-2xl text-xs sm:text-sm tracking-wide transition-all duration-300 ${
             (!selectedAgentId || agentHeldAssets.length === 0)
-              ? "opacity-35 cursor-not-allowed bg-slate-100/50 text-slate-400 border border-slate-200"
+              ? "opacity-50 cursor-not-allowed bg-slate-100/50 text-slate-400 border border-slate-200"
               : activeTab === "handover"
-              ? "bg-amber-600 text-white shadow-md border-b-2 border-amber-700 font-black cursor-pointer"
-              : "bg-white/80 text-slate-600 hover:text-amber-600 hover:bg-white border border-slate-300/40 cursor-pointer"
+              ? "bg-gradient-to-r from-orange-400 to-rose-400 text-white shadow-[0_10px_20px_rgba(249,115,22,0.4)] scale-[1.02] border-0 cursor-pointer"
+              : "bg-white text-slate-500 hover:text-orange-500 shadow-sm hover:shadow-md border border-slate-100 cursor-pointer"
           }`}
           title={(!selectedAgentId || agentHeldAssets.length === 0) ? "Handover options are only available when the selected agent holds active devices." : ""}
         >
-          <ArrowLeftRight className="w-4 h-4 text-amber-500 shrink-0" />
+          <ArrowLeftRight className={`w-5 h-5 transition-transform duration-300 ${activeTab === "handover" ? "text-white" : "text-orange-400 group-hover:scale-110"}`} />
           <span className="text-center font-bold">Handover {agentHeldAssets.length > 0 && `(${agentHeldAssets.length})`}</span>
         </button>
       </div>
 
-      <div className="p-4 sm:p-6 flex-1 flex flex-col lg:flex-row gap-6 bg-white">
+      <div className="p-4 sm:p-6 flex-1 flex flex-col lg:flex-row gap-6 bg-white/50">
         {/* Left Side: Submission Forms */}
         <div className="flex-1 min-w-0">
           {!selectedAgentId ? (
@@ -581,18 +595,18 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
               </div>
             </div>
           ) : (
-            <div className="bg-slate-55/60 bg-slate-50/80 rounded-2xl p-4 sm:p-6 border border-slate-200">
+            <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] p-4 sm:p-6 border border-pink-100 shadow-[0_10px_30px_rgba(236,72,153,0.1)] transition-all">
               {activeTab === "issue" && (
                 <form onSubmit={handleIssueSubmit} className="space-y-4 animate-fadeIn">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-200/75">
-                    <span className="text-xs font-bold text-emerald-800 uppercase tracking-widest flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-255 border-emerald-250">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <div className="flex items-center justify-between pb-3 border-b border-pink-100">
+                    <span className="text-xs font-bold text-teal-800 uppercase tracking-widest flex items-center gap-1.5 bg-teal-50 px-3 py-1.5 rounded-xl border border-teal-200 shadow-sm">
+                      <span className="w-2 h-2 rounded-full bg-teal-500 shadow-[0_0_5px_rgba(20,184,166,0.8)]" />
                       Issue Device Form
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                    <div className="flex flex-col justify-end h-full">
                       <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Filter by Device Type</label>
                       <select
                         value={selectedDeviceType}
@@ -600,27 +614,29 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                           setSelectedDeviceType(e.target.value);
                           setIssueAssetId("");
                         }}
-                        className="w-full h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-emerald-500 font-extrabold text-slate-800 shadow-3xs cursor-pointer"
+                        className={`w-full h-12 ${selectBaseClass}`}
+                        style={selectStyle}
                       >
                         {deviceTypes.map(type => (
-                          <option key={type} value={type}>{type}</option>
+                          <option key={type} value={type} className={optionClass}>{type}</option>
                         ))}
                       </select>
                     </div>
 
-                    <div>
+                    <div className="flex flex-col justify-end h-full">
                       <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Device Asset ID *</label>
                       <div className="flex gap-2">
                         <select
                           value={issueAssetId}
                           onChange={(e) => setIssueAssetId(e.target.value)}
-                          className="flex-1 h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-emerald-500 font-extrabold font-mono text-slate-800 shadow-3xs cursor-pointer"
+                          className={`flex-1 h-12 ${selectBaseClass} font-mono`}
+                          style={selectStyle}
                           required
                           id="issue-asset-select"
                         >
-                          <option value="" className="font-sans">-- Choose available device to issue --</option>
+                          <option value="" className={optionClass}>-- Choose available device to issue --</option>
                           {filteredAssetsForIssue.map((asset) => (
-                            <option key={asset.id} value={asset.id}>
+                            <option key={asset.id} value={asset.id} className={optionClass}>
                               [{asset.id}] - {asset.name} ({asset.type})
                             </option>
                           ))}
@@ -638,22 +654,23 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                    <div className="flex flex-col justify-end h-full">
                       <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Operational Shift *</label>
                       <select
                         value={issueShift}
                         onChange={(e) => setIssueShift(e.target.value)}
-                        className="w-full h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-700 cursor-pointer shadow-3xs"
+                        className={`w-full h-12 ${selectBaseClass}`}
+                        style={selectStyle}
                       >
                         {HOURLY_SHIFTS.map((shift) => (
-                          <option key={shift.value} value={shift.value}>
+                          <option key={shift.value} value={shift.value} className={optionClass}>
                             {shift.label}
                           </option>
                         ))}
                       </select>
                     </div>
-                    <div>
+                    <div className="flex flex-col justify-end h-full">
                       <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Auto Handover Time</label>
                       <div className="w-full h-12 px-4 bg-slate-100 text-slate-500 rounded-xl text-xs sm:text-sm font-bold font-mono select-none flex items-center gap-2 border border-slate-200">
                         <Clock className="w-4 h-4 text-slate-400 shrink-0" />
@@ -675,19 +692,19 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 
                   <button
                     type="submit"
-                    className="w-full h-12 text-white bg-emerald-600 hover:bg-emerald-700 font-black rounded-xl text-xs sm:text-sm tracking-wide transition shadow-md hover:shadow-lg active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 border border-emerald-700"
+                    className="w-full h-14 mt-4 text-white bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-teal-400 hover:to-emerald-400 font-extrabold rounded-2xl text-xs sm:text-sm tracking-wide transition-all duration-300 shadow-[0_10px_20px_rgba(52,211,153,0.3)] hover:shadow-[0_15px_30px_rgba(52,211,153,0.5)] hover:scale-105 cursor-pointer flex items-center justify-center gap-2 border-0"
                   >
                     <span>Confirm Issue Verification</span>
-                    <span className="text-emerald-100">🟢</span>
+                    <span className="text-emerald-100 text-lg">🟢</span>
                   </button>
                 </form>
               )}
 
               {activeTab === "return" && (
                 <form onSubmit={handleReturnSubmit} className="space-y-4 animate-fadeIn">
-                  <div className="pb-3 border-b border-slate-205">
-                    <span className="text-xs font-bold text-indigo-850 uppercase tracking-widest flex items-center gap-1.5 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200 w-fit">
-                      <span className="w-2 h-2 rounded-full bg-indigo-550" />
+                  <div className="pb-3 border-b border-pink-100">
+                    <span className="text-xs font-bold text-indigo-800 uppercase tracking-widest flex items-center gap-1.5 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-200 w-fit shadow-sm">
+                      <span className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_5px_rgba(99,102,241,0.8)]" />
                       Asset Return Form
                     </span>
                   </div>
@@ -697,31 +714,33 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                     <select
                       value={returnAssetId}
                       onChange={(e) => setReturnAssetId(e.target.value)}
-                      className="w-full h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-indigo-505 font-bold font-mono text-slate-850 shadow-3xs cursor-pointer"
+                      className={`w-full h-12 ${selectBaseClass} font-mono`}
+                      style={selectStyle}
                       required
                     >
-                      <option value="" className="font-sans text-slate-500">-- Choose returning device --</option>
+                      <option value="" className={optionClass}>-- Choose returning device --</option>
                       {agentHeldAssets.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
+                        <option key={asset.id} value={asset.id} className={optionClass}>
                           [{asset.id}] - {asset.name} ({asset.type})
                         </option>
                       ))}
                     </select>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                    <div className="flex flex-col justify-end h-full">
                       <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Returning Placement State *</label>
                       <select
                         value={returnStatus}
                         onChange={(e) => setReturnStatus(e.target.value as any)}
-                        className="w-full h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 cursor-pointer shadow-3xs"
+                        className={`w-full h-12 ${selectBaseClass}`}
+                        style={selectStyle}
                       >
-                        <option value="In Office">Returned (Safe In Office)</option>
-                        <option value="Missing / Not Returned">⚠️ Missing / Lost Device</option>
+                        <option value="In Office" className={optionClass}>Returned (Safe In Office)</option>
+                        <option value="Missing / Not Returned" className={optionClass}>⚠️ Missing / Lost Device</option>
                       </select>
                     </div>
-                    <div>
+                    <div className="flex flex-col justify-end h-full">
                       <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Auto Return Timestamp</label>
                       <div className="w-full h-12 px-4 text-slate-500 bg-slate-100 rounded-xl text-xs sm:text-sm font-bold font-mono select-none flex items-center gap-2 border border-slate-200">
                         <Clock className="w-4 h-4 text-slate-450 shrink-0" />
@@ -743,19 +762,19 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 
                   <button
                     type="submit"
-                    className="w-full h-12 text-white bg-indigo-600 hover:bg-indigo-750 font-black rounded-xl text-sm sm:text-base tracking-wide shadow-md hover:shadow-lg active:scale-[0.98] transition cursor-pointer flex items-center justify-center gap-2 border border-indigo-705"
+                    className="w-full h-14 mt-4 text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-purple-500 hover:to-indigo-500 font-extrabold rounded-2xl text-sm sm:text-base tracking-wide transition-all duration-300 shadow-[0_10px_20px_rgba(99,102,241,0.3)] hover:shadow-[0_15px_30px_rgba(99,102,241,0.5)] hover:scale-105 cursor-pointer flex items-center justify-center gap-2 border-0"
                   >
                     <span>Log Return Custody Registry</span>
-                    <span className="text-indigo-100">🔵</span>
+                    <span className="text-indigo-100 text-lg">🔵</span>
                   </button>
                 </form>
               )}
 
               {activeTab === "handover" && (
                 <form onSubmit={handleHandoverSubmit} className="space-y-4 animate-fadeIn">
-                  <div className="pb-3 border-b border-slate-205">
-                    <span className="text-xs font-bold text-amber-800 uppercase tracking-widest flex items-center gap-1.5 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 w-fit">
-                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  <div className="pb-3 border-b border-pink-100">
+                    <span className="text-xs font-bold text-orange-800 uppercase tracking-widest flex items-center gap-1.5 bg-orange-50 px-3 py-1.5 rounded-xl border border-orange-200 w-fit shadow-sm">
+                      <span className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_5px_rgba(249,115,22,0.8)]" />
                       Asset Direct Handover Form
                     </span>
                   </div>
@@ -765,12 +784,13 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                     <select
                       value={handoverAssetId}
                       onChange={(e) => setHandoverAssetId(e.target.value)}
-                      className="w-full h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold font-mono text-slate-800 shadow-3xs cursor-pointer"
+                      className={`w-full h-12 ${selectBaseClass} font-mono`}
+                      style={selectStyle}
                       required
                     >
-                      <option value="" className="font-sans text-slate-500">-- Choose device to hand over --</option>
+                      <option value="" className={optionClass}>-- Choose device to hand over --</option>
                       {agentHeldAssets.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
+                        <option key={asset.id} value={asset.id} className={optionClass}>
                           [{asset.id}] - {asset.name} ({asset.type})
                         </option>
                       ))}
@@ -782,14 +802,15 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                     <select
                       value={handoverToAgentId}
                       onChange={(e) => setHandoverToAgentId(e.target.value)}
-                      className="w-full h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold text-slate-800 cursor-pointer shadow-3xs"
+                      className={`w-full h-12 ${selectBaseClass}`}
+                      style={selectStyle}
                       required
                     >
-                      <option value="">-- Choose Recipient Agent --</option>
+                      <option value="" className={optionClass}>-- Choose Recipient Agent --</option>
                       {agents
                         .filter((a) => a.id.toUpperCase() !== selectedAgentId.toUpperCase())
                         .map((agent) => (
-                          <option key={agent.id} value={agent.id}>
+                          <option key={agent.id} value={agent.id} className={optionClass}>
                             👤 {agent.name} ({agent.id}) - {agent.department || "Operations"}
                           </option>
                         ))}
@@ -809,10 +830,10 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 
                   <button
                     type="submit"
-                    className="w-full h-12 text-white bg-amber-600 hover:bg-amber-700 font-black rounded-xl text-sm sm:text-base tracking-wide shadow-md hover:shadow-lg active:scale-[0.98] transition cursor-pointer flex items-center justify-center gap-2 border border-amber-700"
+                    className="w-full h-14 mt-4 text-white bg-gradient-to-r from-orange-400 to-rose-400 hover:from-rose-400 hover:to-orange-400 font-extrabold rounded-2xl text-sm sm:text-base tracking-wide transition-all duration-300 shadow-[0_10px_20px_rgba(249,115,22,0.3)] hover:shadow-[0_15px_30px_rgba(249,115,22,0.5)] hover:scale-105 cursor-pointer flex items-center justify-center gap-2 border-0"
                   >
                     <span>Process Supervisor Direct Handover</span>
-                    <span className="text-amber-100">🤝</span>
+                    <span className="text-amber-100 text-lg">🤝</span>
                   </button>
                 </form>
               )}
@@ -821,22 +842,22 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
         </div>
 
         {/* Right Side: Quick Selection Helpers */}
-        <div className="w-full lg:w-80 bg-slate-50 border border-slate-250 rounded-3xl p-5 flex flex-col justify-between shrink-0 shadow-3xs">
+        <div className="w-full lg:w-80 bg-white/80 backdrop-blur-xl border border-pink-100 rounded-[2rem] p-5 flex flex-col justify-between shrink-0 shadow-[0_10px_30px_rgba(236,72,153,0.15)] transition-all">
           <div>
-            <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2 pb-3 border-b border-slate-200 mb-4 uppercase tracking-wider">
-              <Sliders className="w-4 h-4 text-indigo-650 shrink-0" />
+            <h4 className="font-extrabold text-purple-900 text-sm flex items-center gap-2 pb-3 border-b border-pink-100 mb-4 uppercase tracking-wider">
+              <Sliders className="w-5 h-5 text-pink-500 shrink-0" />
               Quick Assist Deck
             </h4>
 
             {activeTab === "issue" ? (
-              <div className="space-y-5">
+              <div className="space-y-6">
                 {/* Available Assets autofill list */}
                 <div>
-                  <span className="text-[11px] uppercase font-bold text-emerald-900 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-md inline-block mb-3 tracking-wider font-sans">
+                  <span className="text-[11px] uppercase font-bold text-teal-800 bg-teal-50 shadow-sm border border-teal-200 px-3 py-1 rounded-lg inline-block mb-3 tracking-wider font-sans">
                     Available Devices ({filteredAssetsForIssue.length})
                   </span>
                   {filteredAssetsForIssue.length === 0 ? (
-                    <span className="text-xs text-slate-400 italic block py-4 bg-white rounded-xl text-center border border-dashed border-slate-200">No matching assets found.</span>
+                    <span className="text-xs text-slate-400 italic block py-4 bg-white/50 rounded-2xl text-center border border-dashed border-slate-200">No matching assets found.</span>
                   ) : (
                     <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
                       {filteredAssetsForIssue.slice(0, 15).map((asset) => (
@@ -844,9 +865,9 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                           key={asset.id}
                           type="button"
                           onClick={() => handleSelectAssetForIssue(asset.id)}
-                          className={`px-3 py-2 bg-white hover:bg-emerald-50 hover:text-emerald-700 text-slate-800 border ${
-                            issueAssetId === asset.id ? "border-emerald-500 bg-emerald-50 text-emerald-800 ring-2 ring-emerald-500" : "border-slate-300"
-                          } rounded-xl text-xs font-mono font-bold active:scale-95 transition-all cursor-pointer shadow-3xs`}
+                          className={`px-3 py-2 bg-white text-slate-800 border-2 ${
+                            issueAssetId === asset.id ? "border-teal-500 shadow-[0_0_10px_rgba(20,184,166,0.3)] bg-teal-50 scale-105" : "border-slate-100 hover:border-teal-300 hover:text-teal-600 hover:scale-[1.03]"
+                          } rounded-2xl text-xs font-mono font-bold active:scale-95 transition-all duration-300 cursor-pointer shadow-sm`}
                         >
                           {asset.id}
                         </button>
@@ -857,22 +878,22 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 
                 {/* Agents list */}
                 <div>
-                  <span className="text-[11px] uppercase font-bold text-indigo-850 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-md inline-block mb-3 tracking-wider font-sans">
-                    Enrolled Agents Roster ({agents.length})
+                  <span className="text-[11px] uppercase font-bold text-purple-800 bg-purple-50 shadow-sm border border-purple-200 px-3 py-1 rounded-lg inline-block mb-3 tracking-wider font-sans">
+                    Enrolled Agents ({agents.length})
                   </span>
                   {agents.length === 0 ? (
-                    <span className="text-xs text-slate-400 italic block py-4 bg-white rounded-xl text-center border border-dashed border-slate-200">No active agents.</span>
+                    <span className="text-xs text-slate-400 italic block py-4 bg-white/50 rounded-2xl text-center border border-dashed border-slate-200">No active agents.</span>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5 sm:gap-2 max-h-48 overflow-y-auto pr-1">
+                    <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-1">
                       {agents.slice(0, 20).map((agent) => (
                         <button
                           key={agent.id}
                           type="button"
                           onClick={() => handleSelectAgent(agent.id)}
-                          className={`px-3 py-2.5 border rounded-xl text-xs font-bold active:scale-95 transition-all cursor-pointer shadow-3xs ${
+                          className={`px-3 py-2.5 border-2 rounded-2xl text-xs font-bold active:scale-95 transition-all duration-300 cursor-pointer shadow-sm ${
                             selectedAgentId.toUpperCase() === agent.id.toUpperCase()
-                              ? "bg-indigo-600 text-white border-indigo-700 shadow-md scale-[1.02]"
-                              : "bg-white hover:bg-indigo-50 hover:border-indigo-400 text-slate-700 border-slate-300"
+                              ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white border-transparent shadow-[0_5px_15px_rgba(236,72,153,0.4)] scale-[1.05]"
+                              : "bg-white hover:border-pink-300 hover:text-pink-600 border-slate-100 hover:scale-[1.03]"
                           }`}
                         >
                           {agent.name.split(" ")[0]} ({agent.id})
@@ -885,11 +906,11 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
             ) : (
               <div className="space-y-4">
                 <div>
-                  <span className="text-[11px] uppercase font-bold text-indigo-900 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-md inline-block mb-3 tracking-wider font-sans">
+                  <span className="text-[11px] uppercase font-bold text-indigo-800 bg-indigo-50 shadow-sm border border-indigo-200 px-3 py-1 rounded-lg inline-block mb-3 tracking-wider font-sans">
                     {currentAgent ? `${currentAgent.name}'s Held Devices` : "Agent Held Devices"} ({agentHeldAssets.length})
                   </span>
                   {agentHeldAssets.length === 0 ? (
-                    <span className="text-xs text-slate-400 italic block py-6 bg-white rounded-xl text-center border border-dashed border-slate-200 p-4 leading-relaxed font-semibold">
+                    <span className="text-xs text-slate-400 italic block py-6 bg-white/50 rounded-2xl text-center border border-dashed border-slate-200 p-4 leading-relaxed font-semibold">
                       This agent currently holds no active device placements.
                     </span>
                   ) : (
@@ -905,10 +926,10 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                               setHandoverAssetId(asset.id);
                             }
                           }}
-                          className={`p-3 border rounded-xl text-xs font-bold active:scale-95 transition-all text-left flex justify-between items-center w-full cursor-pointer shadow-3xs ${
+                          className={`p-3 border-2 rounded-2xl text-xs font-bold active:scale-95 transition-all duration-300 text-left flex justify-between items-center w-full cursor-pointer shadow-sm ${
                             (activeTab === "return" ? returnAssetId : handoverAssetId) === asset.id
-                              ? "bg-indigo-600 border-indigo-700 text-white shadow-md scale-[1.01]"
-                              : "bg-white hover:bg-slate-55 text-slate-850 border-slate-200"
+                              ? "bg-gradient-to-r from-indigo-500 to-purple-500 border-transparent text-white shadow-[0_5px_15px_rgba(99,102,241,0.4)] scale-[1.03]"
+                              : "bg-white hover:border-indigo-300 hover:text-indigo-600 border-slate-100 hover:scale-[1.02]"
                           }`}
                         >
                           <div className="flex flex-col">
@@ -1062,6 +1083,7 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

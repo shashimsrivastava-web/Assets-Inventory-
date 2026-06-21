@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Laptop, Shield, User, Clock, AlertTriangle } from "lucide-react";
+import { selectBaseClass, selectStyle, optionClass } from "../lib/selectTheme";
 import { HOURLY_SHIFTS } from "../utils/shiftConfig";
 
 interface HeaderProps {
@@ -139,10 +140,11 @@ export default function Header({ role, setRole, activeShift, isAgentPortal, onCh
                 id="header-shift-select"
                 value={activeShift}
                 onChange={(e) => onChangeShift(e.target.value)}
-                className="bg-emerald-55 bg-emerald-50 text-emerald-800 border border-emerald-250 border-emerald-200 px-2 py-1 rounded font-bold uppercase tracking-wide text-[10px] cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                className={`${selectBaseClass} w-auto h-8 py-0 px-2 text-[10px] uppercase`}
+                style={{ ...selectStyle, paddingRight: '2rem' }}
               >
                 {HOURLY_SHIFTS.map((shift) => (
-                  <option key={shift.value} value={shift.value} className="text-slate-800 font-sans tracking-normal capitalize font-medium text-xs">
+                  <option key={shift.value} value={shift.value} className={optionClass}>
                     {shift.label}
                   </option>
                 ))}

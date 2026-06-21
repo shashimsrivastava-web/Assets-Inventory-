@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { selectBaseClass, selectStyle, optionClass } from "../lib/selectTheme";
 import { Transaction, Asset, Agent } from "../types";
 import { Calendar, BarChart3, TrendingUp, HelpCircle, FileText, Smartphone, Users, RotateCcw, Search, Clock, Award, ShieldAlert } from "lucide-react";
 
@@ -200,11 +201,12 @@ export default function Reports({ transactions, assets, agents }: ReportsProps) 
             <select
               value={selectedAgentId}
               onChange={(e) => setSelectedAgentId(e.target.value)}
-              className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-sm focus:ring-1 focus:ring-indigo-500/50 focus:outline-none transition-all font-medium text-slate-800 cursor-pointer"
+              className={`w-full h-10 ${selectBaseClass}`}
+              style={selectStyle}
             >
-              <option value="">-- Choose active agent from roster --</option>
+              <option value="" className={optionClass}>-- Choose active agent from roster --</option>
               {agents.map((ag) => (
-                <option key={ag.id} value={ag.id}>
+                <option key={ag.id} value={ag.id} className={optionClass}>
                   {ag.name} (ID: {ag.id} - {ag.department || "General Operational Team"})
                 </option>
               ))}
