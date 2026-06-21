@@ -1138,22 +1138,16 @@ function VideoSimulator({ onScan }: { onScan: (id: string) => void }) {
     async function enableScanner() {
       try {
         setCameraPermissionState("pending");
-        html5QrCode = new Html5Qrcode("reader");
+        html5QrCode = new Html5Qrcode("reader", {
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true
+          }
+        } as any);
         
         await html5QrCode.start(
           { facingMode: "environment" },
           { 
-            fps: 10,
-            qrbox: { width: 250, height: 150 },
-            formatsToSupport: [
-              Html5QrcodeSupportedFormats.QR_CODE,
-              Html5QrcodeSupportedFormats.CODE_128,
-              Html5QrcodeSupportedFormats.CODE_39,
-              Html5QrcodeSupportedFormats.EAN_13,
-              Html5QrcodeSupportedFormats.EAN_8,
-              Html5QrcodeSupportedFormats.UPC_A,
-              Html5QrcodeSupportedFormats.UPC_E
-            ]
+            fps: 20
           },
           (decodedText) => {
             if (!isScanning) return;
