@@ -1125,10 +1125,87 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 }
 
 function VideoSimulator() {
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
+  const [cameraPermissionState, setCameraPermissionState] = useState<"pending" | "granted" | "denied">("pending");
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let activeStream: MediaStream | null = null;
+
+    async function enableCamera() {
+      try {
+        setCameraPermissionState("pending");
+        // Request video stream with preferred environmental camera (rear camera on mobile devices)
+        const mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }
+        });
+        activeStream = mediaStream;
+        setCameraPermissionState("granted");
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+        }
+      } catch (err: any) {
+        console.error("Camera access failed:", err);
+        setCameraPermissionState("denied");
+        setCameraError(err.message || "Permissions blocked or no camera detected.");
+      }
+    }
+
+    enableCamera();
+
+    return () => {
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
+
   return (
-    <div className="flex flex-col items-center opacity-60">
-      <div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mb-2" />
-      <span className="font-mono text-[10px] tracking-widest text-[#2dd4bf]">CONNECTING SHIFT SCAN CAMERA...</span>
+    <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-slate-950">
+      {cameraPermissionState === "pending" && (
+        <div className="flex flex-col items-center opacity-75 p-4 text-center z-10">
+          <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mb-3" />
+          <span className="font-mono text-[9px] tracking-widest text-[#2dd4bf] font-bold">
+            CONNECTING SHIFT SCAN CAMERA...
+          </span>
+          <span className="text-[9px] text-slate-500 mt-1 font-semibold">Please authorize web devices permissions callback</span>
+        </div>
+      )}
+
+      {cameraPermissionState === "denied" && (
+        <div className="flex flex-col items-center p-4 text-center max-w-xs z-10 space-y-2">
+          <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-full mb-1">
+            <Camera className="w-6 h-6 shrink-0" />
+          </div>
+          <span className="font-bold text-[11px] text-rose-400 uppercase tracking-wider block">
+            Camera Initialization Failed
+          </span>
+          <p className="text-[10px] text-slate-400 leading-relaxed max-h-16 overflow-y-auto">
+            {cameraError}
+          </p>
+          <div className="mt-2 text-[8.5px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono select-all">
+            Check local site settings or check secure domain contexts (https)
+          </div>
+        </div>
+      )}
+
+      {cameraPermissionState === "granted" && (
+        <div className="relative w-full h-full">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+          />
+          {/* Green viewfinder square center border */}
+          <div className="absolute inset-8 border border-dashed border-teal-400/40 rounded flex items-center justify-center pointer-events-none z-10">
+            <span className="text-[9px] bg-black/60 text-teal-400 px-1.5 py-0.5 border border-teal-500/20 rounded font-mono uppercase tracking-widest leading-none font-black animate-pulse">
+              [ LIVE SCANNING VIEWPORT ]
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
