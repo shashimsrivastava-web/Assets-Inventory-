@@ -248,9 +248,10 @@ export default function AgentPortal({
 
   // Scanner Simulator Scanner Code selection
   const handleSimulatedScan = (scannedId: string) => {
-    setSelectedAssetId(scannedId);
+    const assetIdUpper = scannedId.toUpperCase().trim();
+    setSelectedAssetId(assetIdUpper);
     setShowScanner(false);
-    alert(`⚡ Scanned Device ID: ${scannedId}`);
+    alert(`⚡ Scanned Device ID: ${assetIdUpper}`);
   };
 
   // Initiate direct device handover with target agent verification
@@ -942,19 +943,22 @@ export default function AgentPortal({
                       <label className="block text-xs font-semibold text-slate-500 mb-1.5">
                         Choose Available Device from Cabinet
                       </label>
-                      <select
+                      <input
+                        type="text"
+                        list="cabinet-assets"
                         value={selectedAssetId}
-                        onChange={(e) => setSelectedAssetId(e.target.value)}
-                        className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-xs font-medium text-slate-700 cursor-pointer"
+                        onChange={(e) => setSelectedAssetId(e.target.value.toUpperCase())}
+                        className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-xs font-medium text-slate-700 uppercase"
                         required
-                      >
-                        <option value="">-- Choose hardware item --</option>
+                        placeholder="Scan or choose hardware item..."
+                      />
+                      <datalist id="cabinet-assets">
                         {availableAssets.map((asset) => (
                           <option key={asset.id} value={asset.id}>
-                            [{asset.id}] - {asset.name} ({asset.type})
+                            {asset.name} ({asset.type})
                           </option>
                         ))}
-                      </select>
+                      </datalist>
                     </div>
 
                     {/* Quick Select Buttons */}
