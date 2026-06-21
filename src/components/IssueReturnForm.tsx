@@ -22,6 +22,7 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 
   // Main operational agent selection
   const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [agentSearchQuery, setAgentSearchQuery] = useState("");
 
   // Form states - Issue
   const [selectedDeviceType, setSelectedDeviceType] = useState<string>("All");
@@ -449,39 +450,65 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
     return availableAssetsForIssue.filter(a => a.type === selectedDeviceType);
   }, [availableAssetsForIssue, selectedDeviceType]);
 
+  const activeShiftAgents = useMemo(() => {
+    const agentsWithDevices = agents.filter(agent => {
+      return assets.some(a => 
+        a.status === AssetStatus.ISSUED &&
+        transactions.find(tx => tx.id === a.currentAssignmentId)?.employeeId === agent.id
+      );
+    });
+    return agentsWithDevices.sort((a, b) => a.name.localeCompare(b.name));
+  }, [agents, assets, transactions]);
+
+  const displayedAgents = useMemo(() => {
+    return activeShiftAgents.filter(a => a.name.toLowerCase().includes(agentSearchQuery.toLowerCase()));
+  }, [activeShiftAgents, agentSearchQuery]);
+
   return (
     <div id="issue-return-control" className="bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(236,72,153,0.3)] flex flex-col p-1 sm:p-2 transition-all duration-500 hover:shadow-[0_20px_60px_rgba(236,72,153,0.5)]">
       <div className="bg-white/95 backdrop-blur-3xl rounded-[1.5rem] overflow-hidden flex flex-col shadow-inner w-full flex-1">
       {/* Selected Agent Header Search Panel - Premium Dark Slate Indigo Design */}
-      <div className="bg-transparent text-slate-900 border-b border-indigo-900/10 p-4 sm:p-6 flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
+      <div className="bg-transparent text-slate-900 border-b border-indigo-900/10 p-4 sm:p-6 flex flex-col md:flex-row gap-4 items-stretch md:items-start justify-between">
         <div className="flex-1 min-w-0">
           <label className="block text-[11px] uppercase font-bold text-pink-600 mb-2 tracking-widest font-sans flex items-center gap-1.5 drop-shadow-sm">
             <span className="w-2 h-2 rounded-full bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.8)] animate-pulse inline-block" />
             1. Select ACTIVE SHIFT AGENT *
           </label>
-          <div className="flex gap-2 w-full">
-            <select
-              value={selectedAgentId}
-              onChange={(e) => handleSelectAgent(e.target.value)}
-              className={`flex-1 h-12 ${selectBaseClass}`}
-              style={selectStyle}
-            >
-              <option value="" className={optionClass}>-- Click here to select Active Agent --</option>
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id} className={optionClass}>
-                  👤 {agent.name} ({agent.id}) - {agent.department || "Operations"}
-                 </option>
-              ))}
-            </select>
-            {selectedAgentId && (
-              <button
-                type="button"
-                onClick={() => setSelectedAgentId("")}
-                className="px-6 text-sm font-extrabold bg-gradient-to-r from-pink-500 to-rose-400 hover:from-rose-400 hover:to-pink-500 text-white rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(244,63,94,0.5)] cursor-pointer h-12 flex items-center justify-center shrink-0 shadow-md border-0"
+          <div className="flex flex-col gap-2 w-full">
+            <div className="relative w-full md:w-64">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search agent name..."
+                value={agentSearchQuery}
+                onChange={(e) => setAgentSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 h-10 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-pink-500/50 focus:border-pink-500 transition-all shadow-sm"
+              />
+            </div>
+            <div className="flex gap-2 w-full">
+              <select
+                value={selectedAgentId}
+                onChange={(e) => handleSelectAgent(e.target.value)}
+                className={`flex-1 h-12 ${selectBaseClass}`}
+                style={selectStyle}
               >
-                Clear
-              </button>
-            )}
+                <option value="" className={optionClass}>-- Click here to select Active Agent --</option>
+                {displayedAgents.map((agent) => (
+                  <option key={agent.id} value={agent.id} className={optionClass}>
+                    👤 {agent.name} ({agent.id}) - {agent.department || "Operations"}
+                   </option>
+                ))}
+              </select>
+              {selectedAgentId && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedAgentId("")}
+                  className="px-6 text-sm font-extrabold bg-gradient-to-r from-pink-500 to-rose-400 hover:from-rose-400 hover:to-pink-500 text-white rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(244,63,94,0.5)] cursor-pointer h-12 flex items-center justify-center shrink-0 shadow-md border-0"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
