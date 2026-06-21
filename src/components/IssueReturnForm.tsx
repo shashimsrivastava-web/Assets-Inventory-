@@ -15,10 +15,17 @@ interface IssueReturnFormProps {
   activeShift: string;
   onRefresh: () => void;
   onAddAlert: (type: "overdue" | "missing" | "duplicate_issue" | "already_returned" | "system", title: string, message: string, assetId?: string) => void;
+  initialTab?: "issue" | "return" | "handover";
 }
 
-export default function IssueReturnForm({ assets, agents, transactions, role, activeShift, onRefresh, onAddAlert }: IssueReturnFormProps) {
+export default function IssueReturnForm({ assets, agents, transactions, role, activeShift, onRefresh, onAddAlert, initialTab }: IssueReturnFormProps) {
   const [activeTab, setActiveTab] = useState<"issue" | "return" | "handover">("issue");
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Main operational agent selection
   const [selectedAgentId, setSelectedAgentId] = useState("");
@@ -29,6 +36,9 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
   const [issueAssetId, setIssueAssetId] = useState("");
   const [issueRemarks, setIssueRemarks] = useState("");
   const [issueShift, setIssueShift] = useState(activeShift);
+  const [issueAssetSearchQuery, setIssueAssetSearchQuery] = useState("");
+  const [issueEmployeeSearchQuery, setIssueEmployeeSearchQuery] = useState("");
+  const [handoverDeviceType, setHandoverDeviceType] = useState<string>("All");
 
   // Form states - Return
   const [returnAssetId, setReturnAssetId] = useState("");
@@ -39,6 +49,7 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
   const [handoverAssetId, setHandoverAssetId] = useState("");
   const [handoverToAgentId, setHandoverToAgentId] = useState("");
   const [handoverRemarks, setHandoverRemarks] = useState("");
+  const [recipientSearchQuery, setRecipientSearchQuery] = useState("");
 
   // Success Confirmation Pop-up modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -79,15 +90,18 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
     (a) => a.id.toUpperCase() === selectedAgentId.toUpperCase().trim()
   );
 
-  // Compute assets currently held by the selected agent
-  const agentHeldAssets = currentAgent
-    ? assets.filter(
+  // Compute assets currently held by the selected agent, sorted alphabetically by ID
+  const agentHeldAssets = useMemo(() => {
+    if (!currentAgent) return [];
+    return assets
+      .filter(
         (a) =>
           a.status === AssetStatus.ISSUED &&
           a.currentAssignmentId &&
           transactions.find((tx) => tx.id === a.currentAssignmentId)?.employeeId.toUpperCase() === currentAgent.id.toUpperCase()
       )
-    : [];
+      .sort((a, b) => a.id.localeCompare(b.id));
+  }, [currentAgent, assets, transactions]);
 
   // Automatically reset tab back to "issue" if selected agent holds no devices
   useEffect(() => {
@@ -446,9 +460,17 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
   }, [availableAssetsForIssue]);
 
   const filteredAssetsForIssue = useMemo(() => {
-    if (selectedDeviceType === "All") return availableAssetsForIssue;
-    return availableAssetsForIssue.filter(a => a.type === selectedDeviceType);
+    const list = selectedDeviceType === "All" ? availableAssetsForIssue : availableAssetsForIssue.filter(a => a.type === selectedDeviceType);
+    return list.sort((a, b) => a.id.localeCompare(b.id));
   }, [availableAssetsForIssue, selectedDeviceType]);
+
+  const searchedAssetsForIssue = useMemo(() => {
+    return filteredAssetsForIssue
+      .filter(a => 
+        a.id.toLowerCase().includes(issueAssetSearchQuery.toLowerCase()) || 
+        a.name.toLowerCase().includes(issueAssetSearchQuery.toLowerCase())
+      );
+  }, [filteredAssetsForIssue, issueAssetSearchQuery]);
 
   const activeShiftAgents = useMemo(() => {
     const agentsWithDevices = agents.filter(agent => {
@@ -463,6 +485,35 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
   const displayedAgents = useMemo(() => {
     return activeShiftAgents.filter(a => a.name.toLowerCase().includes(agentSearchQuery.toLowerCase()));
   }, [activeShiftAgents, agentSearchQuery]);
+
+  const filteredRecipientAgents = useMemo(() => {
+    return agents
+      .filter((a) => a.id.toUpperCase() !== selectedAgentId.toUpperCase())
+      .filter((a) => a.name.toLowerCase().includes(recipientSearchQuery.toLowerCase()))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [agents, selectedAgentId, recipientSearchQuery]);
+
+  const filteredEmployeesForIssue = useMemo(() => {
+    return [...agents]
+      .filter((agent) =>
+        agent.name.toLowerCase().includes(issueEmployeeSearchQuery.toLowerCase()) ||
+        agent.id.toLowerCase().includes(issueEmployeeSearchQuery.toLowerCase())
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [agents, issueEmployeeSearchQuery]);
+
+  const handoverDeviceTypes = useMemo(() => {
+    const types = new Set<string>();
+    agentHeldAssets.forEach(a => types.add(a.type));
+    return ["All", ...sortDeviceTypes(Array.from(types))];
+  }, [agentHeldAssets]);
+
+  const filteredHandoverAssets = useMemo(() => {
+    if (handoverDeviceType === "All") {
+      return agentHeldAssets;
+    }
+    return agentHeldAssets.filter((a) => a.type === handoverDeviceType);
+  }, [agentHeldAssets, handoverDeviceType]);
 
   return (
     <div id="issue-return-control" className="bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(236,72,153,0.3)] flex flex-col p-1 sm:p-2 transition-all duration-500 hover:shadow-[0_20px_60px_rgba(236,72,153,0.5)]">
@@ -595,7 +646,7 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
       <div className="p-4 sm:p-6 flex-1 flex flex-col lg:flex-row gap-6 bg-white/50">
         {/* Left Side: Submission Forms */}
         <div className="flex-1 min-w-0">
-          {!selectedAgentId ? (
+          {!selectedAgentId && activeTab !== "issue" ? (
             <div className="flex flex-col items-center justify-center text-center p-6 sm:p-12 bg-indigo-50/25 border-2 border-dashed border-indigo-150 rounded-2xl min-h-[340px] animate-fadeIn">
               <div className="w-14 h-14 bg-indigo-100 border border-indigo-200 rounded-3xl flex items-center justify-center text-indigo-600 mb-4 shadow-sm">
                 <User className="w-7 h-7 shrink-0" />
@@ -604,22 +655,6 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
               <p className="text-xs sm:text-sm text-slate-600 mt-2 max-w-sm leading-relaxed font-semibold">
                 To issue, return, or transfer terminal scanners and passenger devices, first assign the active <strong className="text-indigo-600">Lufthansa Staff Crew Member</strong>.
               </p>
-              
-              <div className="mt-6 w-full max-w-md">
-                <h5 className="text-[10px] uppercase font-bold text-slate-400 mb-3 tracking-widest text-center">Or click a staff member from Roster:</h5>
-                <div className="flex flex-wrap gap-2 justify-center">
-                  {agents.slice(0, 6).map(ag => (
-                    <button 
-                      key={ag.id}
-                      onClick={() => handleSelectAgent(ag.id)}
-                      className="px-3.5 py-2.5 text-xs bg-white border border-slate-350 hover:border-indigo-500 hover:text-indigo-750 rounded-xl font-bold text-slate-700 shadow-3xs hover:shadow-2xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
-                    >
-                      <span>👤 {ag.name}</span>
-                      <span className="font-mono text-[10px] bg-indigo-50 text-indigo-600 px-1 py-0.2 rounded font-semibold">{ag.id}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           ) : (
             <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] p-4 sm:p-6 border border-pink-100 shadow-[0_10px_30px_rgba(236,72,153,0.1)] transition-all">
@@ -630,6 +665,45 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                       <span className="w-2 h-2 rounded-full bg-teal-500 shadow-[0_0_5px_rgba(20,184,166,0.8)]" />
                       Issue Device Form
                     </span>
+                  </div>
+
+                  {/* Choose Employee Section */}
+                  <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-dashed border-slate-200 space-y-3">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Lufthansa Crew Member (Sorted Alphabetically) *
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Type to search staff roster..."
+                          value={issueEmployeeSearchQuery}
+                          onChange={(e) => setIssueEmployeeSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 h-11 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all text-slate-800 font-medium animate-fadeIn"
+                        />
+                      </div>
+                      <select
+                        value={selectedAgentId}
+                        onChange={(e) => handleSelectAgent(e.target.value)}
+                        className={`w-full h-11 ${selectBaseClass}`}
+                        style={selectStyle}
+                        required
+                      >
+                        <option value="" className={optionClass}>-- Choose Employee --</option>
+                        {filteredEmployeesForIssue.map((agent) => (
+                          <option key={agent.id} value={agent.id} className={optionClass}>
+                            👤 {agent.name} ({agent.id}) - {agent.department || "Operations"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {currentAgent && (
+                      <div className="flex items-center gap-2 text-xs text-emerald-800 font-semibold bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-1.5 mt-2 animate-fadeIn">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.8)] animate-pulse" />
+                        Active Selection: <strong>{currentAgent.name} ({currentAgent.id})</strong> is active for operational issue.
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
@@ -652,31 +726,43 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 
                     <div className="flex flex-col justify-end h-full">
                       <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Device Asset ID *</label>
-                      <div className="flex gap-2">
-                        <select
-                          value={issueAssetId}
-                          onChange={(e) => setIssueAssetId(e.target.value)}
-                          className={`flex-1 h-12 ${selectBaseClass} font-mono`}
-                          style={selectStyle}
-                          required
-                          id="issue-asset-select"
-                        >
-                          <option value="" className={optionClass}>-- Choose available device to issue --</option>
-                          {filteredAssetsForIssue.map((asset) => (
-                            <option key={asset.id} value={asset.id} className={optionClass}>
-                              [{asset.id}] - {asset.name} ({asset.type})
-                            </option>
-                          ))}
-                        </select>
-                        {issueAssetId && (
-                          <button
-                            type="button"
-                            onClick={() => setIssueAssetId("")}
-                            className="px-4 text-xs font-bold border border-slate-300 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 rounded-xl transition-all h-12 cursor-pointer shadow-3xs"
+                      <div className="flex flex-col gap-2 w-full">
+                        <div className="relative w-full">
+                          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Search device ID or name..."
+                            value={issueAssetSearchQuery}
+                            onChange={(e) => setIssueAssetSearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-3 h-10 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-pink-500/50 focus:border-pink-500 transition-all shadow-sm text-slate-800"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <select
+                            value={issueAssetId}
+                            onChange={(e) => setIssueAssetId(e.target.value)}
+                            className={`flex-1 h-12 ${selectBaseClass} font-mono`}
+                            style={selectStyle}
+                            required
+                            id="issue-asset-select"
                           >
-                            Clear
-                          </button>
-                        )}
+                            <option value="" className={optionClass}>-- Choose available device --</option>
+                            {searchedAssetsForIssue.map((asset) => (
+                              <option key={asset.id} value={asset.id} className={optionClass}>
+                                [{asset.id}] - {asset.name} ({asset.type})
+                              </option>
+                            ))}
+                          </select>
+                          {issueAssetId && (
+                            <button
+                              type="button"
+                              onClick={() => setIssueAssetId("")}
+                              className="px-4 text-xs font-bold border border-slate-300 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 rounded-xl transition-all h-12 cursor-pointer shadow-3xs"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -800,32 +886,63 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
               {activeTab === "handover" && (
                 <form onSubmit={handleHandoverSubmit} className="space-y-4 animate-fadeIn">
                   <div className="pb-3 border-b border-pink-100">
-                    <span className="text-xs font-bold text-orange-800 uppercase tracking-widest flex items-center gap-1.5 bg-orange-50 px-3 py-1.5 rounded-xl border border-orange-200 w-fit shadow-sm">
+                    <span className="text-xs font-bold text-orange-850 uppercase tracking-widest flex items-center gap-1.5 bg-orange-50 px-3 py-1.5 rounded-xl border border-orange-200 w-fit shadow-sm text-orange-800">
                       <span className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_5px_rgba(249,115,22,0.8)]" />
                       Asset Direct Handover Form
                     </span>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Choose Device held by {currentAgent?.name} *</label>
-                    <select
-                      value={handoverAssetId}
-                      onChange={(e) => setHandoverAssetId(e.target.value)}
-                      className={`w-full h-12 ${selectBaseClass} font-mono`}
-                      style={selectStyle}
-                      required
-                    >
-                      <option value="" className={optionClass}>-- Choose device to hand over --</option>
-                      {agentHeldAssets.map((asset) => (
-                        <option key={asset.id} value={asset.id} className={optionClass}>
-                          [{asset.id}] - {asset.name} ({asset.type})
-                        </option>
-                      ))}
-                    </select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                    <div className="flex flex-col justify-end h-full">
+                      <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Filter Handover Devices by Type</label>
+                      <select
+                        value={handoverDeviceType}
+                        onChange={(e) => {
+                          setHandoverDeviceType(e.target.value);
+                          setHandoverAssetId("");
+                        }}
+                        className={`w-full h-12 ${selectBaseClass}`}
+                        style={selectStyle}
+                      >
+                        {handoverDeviceTypes.map(type => (
+                          <option key={type} value={type} className={optionClass}>{type}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col justify-end h-full">
+                      <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Choose Device held by {currentAgent?.name} *</label>
+                      <select
+                        value={handoverAssetId}
+                        onChange={(e) => setHandoverAssetId(e.target.value)}
+                        className={`w-full h-12 ${selectBaseClass} font-mono`}
+                        style={selectStyle}
+                        required
+                      >
+                        <option value="" className={optionClass}>-- Choose device to hand over --</option>
+                        {filteredHandoverAssets.map((asset) => (
+                          <option key={asset.id} value={asset.id} className={optionClass}>
+                            [{asset.id}] - {asset.name} ({asset.type})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Direct Recipient (To Agent) *</label>
+                    <div className="flex flex-col gap-2 w-full mb-2">
+                      <div className="relative w-full">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search recipient name..."
+                          value={recipientSearchQuery}
+                          onChange={(e) => setRecipientSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 h-10 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-pink-500/50 focus:border-pink-500 transition-all shadow-sm text-slate-800"
+                        />
+                      </div>
+                    </div>
                     <select
                       value={handoverToAgentId}
                       onChange={(e) => setHandoverToAgentId(e.target.value)}
@@ -834,13 +951,11 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                       required
                     >
                       <option value="" className={optionClass}>-- Choose Recipient Agent --</option>
-                      {agents
-                        .filter((a) => a.id.toUpperCase() !== selectedAgentId.toUpperCase())
-                        .map((agent) => (
-                          <option key={agent.id} value={agent.id} className={optionClass}>
-                            👤 {agent.name} ({agent.id}) - {agent.department || "Operations"}
-                          </option>
-                        ))}
+                      {filteredRecipientAgents.map((agent) => (
+                        <option key={agent.id} value={agent.id} className={optionClass}>
+                          👤 {agent.name} ({agent.id}) - {agent.department || "Operations"}
+                        </option>
+                      ))}
                     </select>
                   </div>
 

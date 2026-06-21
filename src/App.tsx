@@ -25,6 +25,12 @@ export default function App() {
   const [activeShift, setActiveShift] = useState(getRecommendedShiftByTime());
   const [viewMode, setViewMode] = useState<"console" | "agent">("console");
 
+  // Metric Navigation sync states
+  const [assetSearchTerm, setAssetSearchTerm] = useState("");
+  const [assetTypeFilter, setAssetTypeFilter] = useState("All");
+  const [assetStatusFilter, setAssetStatusFilter] = useState("All");
+  const [issueReturnInitialTab, setIssueReturnInitialTab] = useState<"issue" | "return" | "handover">("issue");
+
   // Console credentials permission validation
   const [isAuthenticatedSupervisor, setIsAuthenticatedSupervisor] = useState(() => sessionStorage.getItem("auth_supervisor") === "true");
   const [isAuthenticatedAdmin, setIsAuthenticatedAdmin] = useState(() => sessionStorage.getItem("auth_admin") === "true");
@@ -406,7 +412,10 @@ export default function App() {
 
             <button
               id="nav-tab-handover"
-              onClick={() => setActiveTab("handover")}
+              onClick={() => {
+                setIssueReturnInitialTab("issue");
+                setActiveTab("handover");
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
                 activeTab === "handover"
                   ? "bg-indigo-50 text-indigo-700 border-indigo-105/50 font-bold"
@@ -418,7 +427,12 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => setActiveTab("assets")}
+              onClick={() => {
+                setAssetTypeFilter("All");
+                setAssetSearchTerm("");
+                setAssetStatusFilter("All");
+                setActiveTab("assets");
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
                 activeTab === "assets"
                   ? "bg-indigo-50 text-indigo-700 border-indigo-105/50 font-bold"
@@ -563,6 +577,16 @@ export default function App() {
               transactions={transactions}
               loading={loading}
               onRefresh={handleForceSync}
+              onNavigateToAssets={(typeFilter, searchTerm, statusFilter) => {
+                setAssetTypeFilter(typeFilter || "All");
+                setAssetSearchTerm(searchTerm || "");
+                setAssetStatusFilter(statusFilter || "All");
+                setActiveTab("assets");
+              }}
+              onNavigateToIssueReturn={(subTab) => {
+                setIssueReturnInitialTab(subTab || "issue");
+                setActiveTab("handover");
+              }}
             />
           )}
 
@@ -575,6 +599,7 @@ export default function App() {
               activeShift={activeShift}
               onRefresh={handleForceSync}
               onAddAlert={handleAddNewAlert}
+              initialTab={issueReturnInitialTab}
             />
           )}
 
@@ -585,6 +610,9 @@ export default function App() {
               loading={loading}
               onRefresh={handleForceSync}
               onAddAlert={handleAddNewAlert}
+              initialTypeFilter={assetTypeFilter}
+              initialSearchTerm={assetSearchTerm}
+              initialStatusFilter={assetStatusFilter}
             />
           )}
 

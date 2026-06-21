@@ -61,6 +61,12 @@ export default function AgentPortal({
   const [portalHandoverToAgentId, setPortalHandoverToAgentId] = useState("");
   const [searchValidationQuery, setSearchValidationQuery] = useState("");
 
+  // New Return Section in Agent Desk
+  const [portalReturnAssetId, setPortalReturnAssetId] = useState("");
+  const [portalReturnRemarks, setPortalReturnRemarks] = useState("");
+  const [portalReturnStatus, setPortalReturnStatus] = useState<AssetStatus>(AssetStatus.IN_OFFICE);
+  const [portalReturnSearchQuery, setPortalReturnSearchQuery] = useState("");
+
   const selectBaseClass = "bg-[#05162E] text-white border-2 border-transparent rounded-xl text-sm md:text-base font-bold shadow-[0_4px_10px_rgba(0,0,0,0.3)] hover:border-[#0066FF] hover:shadow-[0_0_15px_rgba(0,102,255,0.4)] focus:outline-none focus:border-[#0066FF] focus:ring-4 focus:ring-[#0066FF]/40 transition-all duration-300 cursor-pointer appearance-none outline-none";
   const selectStyle = {
     backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
@@ -204,7 +210,7 @@ export default function AgentPortal({
   };
 
   // Self-Return action trigger
-  const handleSelfReturn = async (assetId: string, remarksText: string = "") => {
+  const handleSelfReturn = async (assetId: string, remarksText: string = "", statusState: AssetStatus = AssetStatus.IN_OFFICE) => {
     if (!currentAgent) return;
 
     const assetObj = assets.find((a) => a.id === assetId);
@@ -229,7 +235,7 @@ export default function AgentPortal({
         returnTime: currentTimeStr,
         returnTimestamp: returnTimeMs,
         returnRemarks: remarksText || returnRemarks || "Self-returned from Agent Portal",
-        status: "Returned"
+        status: statusState === AssetStatus.MISSING ? "Missing / Not Returned" : "Returned"
       };
 
       if (txSnap.exists()) {
@@ -243,7 +249,7 @@ export default function AgentPortal({
 
       // 2. Clear Asset Assignments
       await updateDoc(doc(assetsCol, assetId), {
-        status: AssetStatus.IN_OFFICE,
+        status: statusState,
         currentAssignmentId: null,
         lastUpdated: returnTimeMs
       });
@@ -457,6 +463,15 @@ export default function AgentPortal({
           transactions.find((tx) => tx.id === a.currentAssignmentId)?.employeeId === currentAgent.id
       )
     : [];
+
+  const searchedMyDevicesHeld = useMemo(() => {
+    return myDevicesHeld
+      .filter((a) =>
+        a.id.toLowerCase().includes(portalReturnSearchQuery.toLowerCase()) ||
+        a.name.toLowerCase().includes(portalReturnSearchQuery.toLowerCase())
+      )
+      .sort((a, b) => a.id.localeCompare(b.id));
+  }, [myDevicesHeld, portalReturnSearchQuery]);
 
   const myHistory = currentAgent
     ? transactions.filter((tx) => tx.employeeId === currentAgent.id)
@@ -1196,6 +1211,122 @@ export default function AgentPortal({
                         </button>
                       );
                     })()}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION: RETURN DEVICE TO OFFICE CABINET */}
+            <div id="central-device-return-panel" className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mt-6">
+              <div className="flex items-center gap-2 pb-3 border-b border-slate-100 mb-5">
+                <div className="p-2 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-700">
+                  <ArrowDownLeft className="w-4 h-4 shrink-0" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-800">
+                    Return Device to Office Cabinet
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Verify check-in of shift gear safely into the main office locker cabinet.</p>
+                </div>
+              </div>
+
+              {myDevicesHeld.length === 0 ? (
+                <div className="py-8 px-4 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                  <div className="w-10 h-10 bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center text-slate-400 mx-auto mb-3">
+                    <ShieldAlert className="w-5 h-5 shrink-0" />
+                  </div>
+                  <h4 className="font-bold text-xs text-slate-700">Return Option Unavailable</h4>
+                  <p className="text-[10.5px] text-slate-500 max-w-sm mx-auto mt-1 leading-relaxed">
+                    This option is active only when you have at least one device in your custody. Please self-issue a device from the Shift Cabinet above first.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fadeIn">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider font-sans">
+                        1. Select Device to Return *
+                      </label>
+                      <div className="flex flex-col gap-2 w-full mb-2">
+                        <div className="relative w-full">
+                          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Type to filter your devices..."
+                            value={portalReturnSearchQuery}
+                            onChange={(e) => setPortalReturnSearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-slate-800"
+                          />
+                        </div>
+                      </div>
+                      <select
+                        value={portalReturnAssetId}
+                        onChange={(e) => setPortalReturnAssetId(e.target.value)}
+                        className={`w-full h-11 ${selectBaseClass} text-xs md:text-sm font-mono`}
+                        style={selectStyle}
+                        required
+                      >
+                        <option value="" className={optionClass}>-- Choose your device in custody --</option>
+                        {searchedMyDevicesHeld.map((asset) => (
+                          <option key={asset.id} value={asset.id} className={optionClass}>
+                            [{asset.id}] - {asset.name} ({asset.type})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-slate-400 mt-1">Only devices under your active checkout are displayed.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider font-sans">
+                        2. Returning Cabinet Placement State *
+                      </label>
+                      <select
+                        value={portalReturnStatus}
+                        onChange={(e) => setPortalReturnStatus(e.target.value as AssetStatus)}
+                        className={`w-full h-11 ${selectBaseClass} text-xs md:text-sm`}
+                        style={selectStyle}
+                        required
+                      >
+                        <option value={AssetStatus.IN_OFFICE} className={optionClass}>Returned (Safe In Office cabinet)</option>
+                        <option value={AssetStatus.MISSING} className={optionClass}>⚠️ Missing / Lost Device</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 flex flex-col justify-between">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider font-sans">
+                        3. Return Remarks / Comments
+                      </label>
+                      <textarea
+                        value={portalReturnRemarks}
+                        onChange={(e) => setPortalReturnRemarks(e.target.value)}
+                        placeholder="State any specific physical status, charging/battery level, or defect notes (optional)..."
+                        rows={3.5}
+                        className="w-full px-3.5 py-2.5 border border-slate-200 bg-slate-50/20 focus:bg-white rounded-xl text-xs focus:outline-none transition-all text-slate-800 font-sans"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={!portalReturnAssetId}
+                      onClick={() => {
+                        if (portalReturnAssetId) {
+                          handleSelfReturn(portalReturnAssetId, portalReturnRemarks, portalReturnStatus);
+                          // Clear local return inputs
+                          setPortalReturnAssetId("");
+                          setPortalReturnRemarks("");
+                          setPortalReturnStatus(AssetStatus.IN_OFFICE);
+                        }
+                      }}
+                      className={`w-full py-3 text-xs sm:text-sm font-bold rounded-xl tracking-wider uppercase transition shadow-sm cursor-pointer ${
+                        portalReturnAssetId
+                          ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                          : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                      }`}
+                    >
+                      Confirm Drop-off & Lock Cabinet ➔
+                    </button>
                   </div>
                 </div>
               )}

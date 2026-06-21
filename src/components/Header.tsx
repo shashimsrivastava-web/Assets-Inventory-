@@ -122,7 +122,9 @@ export default function Header({ role, setRole, activeShift, isAgentPortal, onCh
           <h1 className="font-bold text-base md:text-lg tracking-tight text-[#071d49] leading-tight">
             Lufthansa Group DELSM Electronics Devices Inventory Log
           </h1>
-          <p id="app-subtitle" className="text-xs text-slate-500 font-semibold mt-0.5">Lufthansa Shift Asset Issue & Return Desk</p>
+          <p id="app-subtitle" className="text-xs text-slate-500 font-semibold mt-0.5">
+            Lufthansa Shift Asset Issue & Return Desk <span className="text-slate-400 font-normal px-1.5">•</span> <span className="bg-[#071d49]/5 text-[#071d49] text-[10px] px-2 py-0.5 rounded-full font-mono font-medium">Build 1.3.5 - 21June</span>
+          </p>
         </div>
       </div>
 

@@ -14,6 +14,9 @@ interface AssetMasterProps {
   loading: boolean;
   onRefresh: () => void;
   onAddAlert: (type: "overdue" | "missing" | "duplicate_issue" | "already_returned" | "system", title: string, message: string, assetId?: string) => void;
+  initialTypeFilter?: string;
+  initialSearchTerm?: string;
+  initialStatusFilter?: string;
 }
 
 const PRESET_IMAGES = [
@@ -73,7 +76,7 @@ function generateCode39SVG(data: string) {
   );
 }
 
-export default function AssetMaster({ assets, role, loading, onRefresh, onAddAlert }: AssetMasterProps) {
+export default function AssetMaster({ assets, role, loading, onRefresh, onAddAlert, initialTypeFilter, initialSearchTerm, initialStatusFilter }: AssetMasterProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
 
@@ -96,6 +99,25 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
   // Search & Type Filters inside Asset Master
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
+
+  useEffect(() => {
+    if (initialTypeFilter !== undefined) {
+      setTypeFilter(initialTypeFilter);
+    }
+  }, [initialTypeFilter]);
+
+  useEffect(() => {
+    if (initialSearchTerm !== undefined) {
+      setSearchTerm(initialSearchTerm);
+    }
+  }, [initialSearchTerm]);
+
+  useEffect(() => {
+    if (initialStatusFilter !== undefined) {
+      setStatusFilter(initialStatusFilter);
+    }
+  }, [initialStatusFilter]);
 
   // Custom modal for barcode printing bypasses sandboxed iframe window.open blockers
   const [activePrintAsset, setActivePrintAsset] = useState<Asset | null>(null);
@@ -629,10 +651,68 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
       (asset.id || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (asset.name || "").toLowerCase().includes(searchTerm.toLowerCase());
 
+    // 1. Status Filter matching logic
+    let matchesStatus = true;
+    if (statusFilter !== "All") {
+      if (statusFilter.toLowerCase() === "issued") {
+        matchesStatus = (asset.status || "").toLowerCase() === "issued" || (asset.status || "").toLowerCase() === "active issued";
+      } else if (statusFilter.toLowerCase() === "in office") {
+        matchesStatus = (asset.status || "").toLowerCase() === "in office" || (asset.status || "").toLowerCase() === "in_office";
+      } else if (statusFilter.toLowerCase() === "missing") {
+        matchesStatus = (asset.status || "").toLowerCase() === "missing" || (asset.status || "").toLowerCase() === "missing / not returned";
+      } else if (statusFilter.toLowerCase() === "not taken") {
+        matchesStatus = (asset.status || "").toLowerCase() === "not taken" || (asset.status || "").toLowerCase() === "not_taken";
+      } else {
+        matchesStatus = (asset.status || "").toLowerCase() === statusFilter.toLowerCase();
+      }
+    }
+
+    if (!matchesStatus) {
+      return false;
+    }
+
+    // 2. Type Filter matching logic
     if (typeFilter === "All") {
       return matchesSearch;
     }
     
+    // Support compound filters or groups
+    if (typeFilter.toLowerCase() === "ipad group" || typeFilter.toLowerCase() === "ipad") {
+      const typeLower = (asset.type || "").toLowerCase();
+      const nameLower = (asset.name || "").toLowerCase();
+      const isIpadLike = typeLower.includes("ipad") || typeLower.includes("pda") ||
+                         nameLower.includes("ipad") || nameLower.includes("pda");
+      return matchesSearch && isIpadLike;
+    }
+
+    if (typeFilter.toLowerCase() === "ingenico group" || typeFilter.toLowerCase() === "ingenico pos" || typeFilter.toLowerCase() === "ingenico") {
+      const typeLower = (asset.type || "").toLowerCase();
+      const nameLower = (asset.name || "").toLowerCase();
+      const isIngenico = typeLower.includes("ingenico") || nameLower.includes("ingenico");
+      return matchesSearch && isIngenico;
+    }
+
+    if (typeFilter.toLowerCase() === "scanner group" || typeFilter.toLowerCase() === "brs scanner" || typeFilter.toLowerCase() === "scanner") {
+      const typeLower = (asset.type || "").toLowerCase();
+      const nameLower = (asset.name || "").toLowerCase();
+      const isScanner = typeLower.includes("scanner") || nameLower.includes("scanner") ||
+                        typeLower.includes("scan") || nameLower.includes("scan");
+      return matchesSearch && isScanner;
+    }
+
+    if (typeFilter.toLowerCase() === "hold camera phone group" || typeFilter.toLowerCase() === "hold camera phone") {
+      const typeLower = (asset.type || "").toLowerCase();
+      const nameLower = (asset.name || "").toLowerCase();
+      const isHoldCamera = typeLower.includes("hold") || nameLower.includes("hold") ||
+                           typeLower.includes("camera") || nameLower.includes("camera");
+      return matchesSearch && isHoldCamera;
+    }
+
+    if (typeFilter.toLowerCase() === "mobile phone group" || typeFilter.toLowerCase() === "mobile phone") {
+      const typeLower = (asset.type || "").toLowerCase().trim();
+      return matchesSearch && typeLower === "mobile phone";
+    }
+
     if (typeFilter === "Other") {
       const knownTypeNames = deviceTypes.map(dt => (dt.name || "").toLowerCase());
       const isKnown = knownTypeNames.includes((asset.type || "").toLowerCase());
@@ -1333,20 +1413,47 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
           )}
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0 justify-end">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Filter by Type:</span>
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className={`${selectBaseClass} min-w-[140px] px-3 h-8 text-[11px]`}
-            style={{ ...selectStyle, paddingRight: '2rem', backgroundSize: '1.2em 1.2em', backgroundPosition: 'right 0.5rem center' }}
-          >
-            <option value="All" className={optionClass}>All Device Types</option>
-            {deviceTypes.map((dt) => (
-              <option key={dt.id} value={dt.name} className={optionClass}>{dt.name}</option>
-            ))}
-            <option value="Other" className={optionClass}>Other / Custom</option>
-          </select>
+        <div className="flex flex-col sm:flex-row items-center gap-3.5 w-full sm:w-auto shrink-0 justify-end">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Status:</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className={`${selectBaseClass} min-w-[120px] px-3 h-8 text-[11px]`}
+              style={{ ...selectStyle, paddingRight: '2rem', backgroundSize: '1.2em 1.2em', backgroundPosition: 'right 0.5rem center' }}
+            >
+              <option value="All" className={optionClass}>All Statuses</option>
+              <option value="In Office" className={optionClass}>In Office Available</option>
+              <option value="Issued" className={optionClass}>Issued to Agent</option>
+              <option value="Missing" className={optionClass}>Missing / Overdue</option>
+              <option value="Not Taken" className={optionClass}>Not Taken during Shift</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">Type:</span>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className={`${selectBaseClass} min-w-[140px] px-3 h-8 text-[11px]`}
+              style={{ ...selectStyle, paddingRight: '2rem', backgroundSize: '1.2em 1.2em', backgroundPosition: 'right 0.5rem center' }}
+            >
+              <option value="All" className={optionClass}>All Device Types</option>
+              <optgroup label="Compound Groups" className="font-bold text-slate-600 bg-slate-50">
+                <option value="ipad group" className={optionClass}>📱 iPads & PDAs (iPad, iPad Mini, PDA@OPS)</option>
+                <option value="ingenico group" className={optionClass}>💳 Ingenico POS</option>
+                <option value="scanner group" className={optionClass}>🔍 BRS Scanners & PDAs</option>
+                <option value="mobile phone group" className={optionClass}>📞 Mobile Phones Only</option>
+                <option value="hold camera phone group" className={optionClass}>📷 Hold Camera Phones</option>
+              </optgroup>
+              <optgroup label="Registered Types" className="font-bold text-slate-600 bg-slate-50">
+                {deviceTypes.map((dt) => (
+                  <option key={dt.id} value={dt.name} className={optionClass}>{dt.name}</option>
+                ))}
+                <option value="Other" className={optionClass}>Other / Custom</option>
+              </optgroup>
+            </select>
+          </div>
         </div>
       </div>
 
