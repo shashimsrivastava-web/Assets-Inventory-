@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { Asset, Agent, Transaction, AssetStatus } from "../types";
 import { ArrowUpRight, ArrowDownLeft, Calendar, FileText, Clock, HelpCircle, CheckCircle, AlertTriangle, Play, Smartphone, BookOpen, Camera, Search, User, Clipboard, Sliders, ArrowLeftRight } from "lucide-react";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
-import { useZxing } from "react-zxing";
 
 import { db, assetsCol, transactionsCol } from "../firebase";
 import { HOURLY_SHIFTS } from "../utils/shiftConfig";
@@ -37,9 +36,6 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
   const [handoverAssetId, setHandoverAssetId] = useState("");
   const [handoverToAgentId, setHandoverToAgentId] = useState("");
   const [handoverRemarks, setHandoverRemarks] = useState("");
-
-  // Interactive scanner simulation
-  const [showScanner, setShowScanner] = useState(false);
 
   // Success Confirmation Pop-up modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -426,35 +422,6 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
     }
   };
 
-  // Simulate Barcode QR code scanning
-  const handleSimulatedScan = (scannedId: string) => {
-    let finalId = scannedId;
-    if (typeof scannedId !== "string") {
-      finalId = String(scannedId);
-    }
-    const assetIdUpper = finalId.toUpperCase().trim();
-    if (activeTab === "issue") {
-      setIssueAssetId(assetIdUpper);
-    } else if (activeTab === "return") {
-      // Check if held
-      const holdsDevice = agentHeldAssets.some((a) => a.id.toUpperCase() === assetIdUpper);
-      if (selectedAgentId && !holdsDevice) {
-        alert(`Validation Warning: Agent ${selectedAgentId} does not currently hold this device. Scanning blocked.`);
-        return;
-      }
-      setReturnAssetId(assetIdUpper);
-    } else if (activeTab === "handover") {
-      // Check if held
-      const holdsDevice = agentHeldAssets.some((a) => a.id.toUpperCase() === assetIdUpper);
-      if (selectedAgentId && !holdsDevice) {
-        alert(`Validation Warning: Agent ${selectedAgentId} does not currently hold this device. Scanning blocked.`);
-        return;
-      }
-      setHandoverAssetId(assetIdUpper);
-    }
-    setShowScanner(false);
-  };
-
   const availableAssetsForIssue = assets.filter((a) => a.status !== AssetStatus.ISSUED && a.status !== AssetStatus.MISSING);
 
   return (
@@ -610,14 +577,6 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
                       Issue Device Form
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowScanner(true)}
-                      className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-teal-50 to-emerald-50 hover:from-teal-100 hover:to-emerald-100 text-teal-700 hover:text-teal-850 border border-teal-200 hover:border-teal-300 rounded-xl text-xs font-extrabold cursor-pointer transition-all shadow-3xs"
-                    >
-                      <Camera className="w-4 h-4 text-teal-600 animate-pulse shrink-0" />
-                      Scan QR / Label
-                    </button>
                   </div>
 
                   <div>
@@ -962,58 +921,6 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
         </div>
       </div>
 
-      {showScanner && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 text-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
-                <Camera className="w-4 h-4 text-teal-400 animate-pulse" />
-                QR / Barcode Scanner Simulator
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowScanner(false)}
-                className="text-slate-450 hover:text-white text-sm"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="bg-black/40 border border-slate-800 rounded-xl aspect-video relative overflow-hidden mb-4 flex flex-col items-center justify-center text-center p-4">
-              <div className="absolute top-0 inset-x-0 h-0.5 bg-teal-400 shadow-md shadow-teal-400/50 animate-bounce" />
-            <VideoSimulator onScan={handleSimulatedScan} />
-              <p className="text-[11px] text-slate-400 max-w-xs mt-3 relative z-10 font-sans">
-                Align standard flight crew barcode/QR sticker inside the viewfinder frame.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <span className="text-[10px] font-bold text-slate-400 block pb-1 border-b border-slate-800 uppercase tracking-wide">
-                Select barcode payload
-              </span>
-              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                {assets.map((asset) => (
-                  <button
-                    key={asset.id}
-                    onClick={() => handleSimulatedScan(asset.id)}
-                    className="p-2 border border-slate-800 bg-slate-800/50 hover:bg-slate-850 rounded-xl text-left text-xs text-slate-200 truncate transition-colors cursor-pointer"
-                  >
-                    🚀 Scan {asset.id} <span className="text-[9px] text-slate-400 font-sans block truncate font-medium">({asset.name})</span>
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={() => setShowScanner(false)}
-                className="w-full mt-2 p-2 border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold rounded-xl text-center cursor-pointer transition-colors"
-              >
-                Cancel Stream
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {confirmModal && confirmModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white border border-slate-250 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden animate-scaleIn border-slate-200">
@@ -1138,86 +1045,3 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
   );
 }
 
-function VideoSimulator({ onScan }: { onScan: (id: string) => void }) {
-  const [cameraPermissionState, setCameraPermissionState] = useState<"pending" | "granted" | "denied">("pending");
-  const [cameraError, setCameraError] = useState<string | null>(null);
-
-  const isScanningRef = useRef(true);
-
-  useEffect(() => {
-    isScanningRef.current = true;
-  }, []);
-
-  const { ref } = useZxing({
-    onDecodeResult(result: any) {
-      if (!isScanningRef.current) return;
-      isScanningRef.current = false;
-      const text = result.getText ? result.getText() : (result.text || result.rawValue || result);
-      onScan(typeof text === "string" ? text : String(text));
-    },
-    onError(error: any) {
-      if (
-        error.name === "NotAllowedError" ||
-        error.name === "NotFoundError" ||
-        error.name === "NotReadableError"
-      ) {
-        setCameraPermissionState("denied");
-        setCameraError(error.message || "Permissions blocked or no camera detected.");
-      }
-    }
-  });
-
-  useEffect(() => {
-    // There is no explicit "granted" callback in useZxing, but video stream will start.
-    // If we have video stream (i.e. ref element has srcObject), we consider it granted.
-    const pollDevice = setInterval(() => {
-      if (ref.current && ref.current.srcObject) {
-        setCameraPermissionState("granted");
-        clearInterval(pollDevice);
-      }
-    }, 500);
-    return () => clearInterval(pollDevice);
-  }, [ref]);
-
-  return (
-    <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-slate-950">
-      <video ref={ref} className="w-full h-full object-cover" muted playsInline />
-      
-      {cameraPermissionState === "pending" && (
-        <div className="flex flex-col items-center opacity-75 p-4 text-center z-10 absolute inset-0 justify-center pointer-events-none">
-          <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mb-3" />
-          <span className="font-mono text-[9px] tracking-widest text-[#2dd4bf] font-bold">
-            CONNECTING SHIFT SCAN CAMERA...
-          </span>
-          <span className="text-[9px] text-slate-500 mt-1 font-semibold">Please authorize web devices permissions</span>
-        </div>
-      )}
-
-      {cameraPermissionState === "denied" && (
-        <div className="flex flex-col items-center p-4 text-center max-w-xs z-10 space-y-2 absolute inset-0 justify-center">
-          <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-full mb-1">
-            <Camera className="w-6 h-6 shrink-0" />
-          </div>
-          <span className="font-bold text-[11px] text-rose-400 uppercase tracking-wider block">
-            Camera Initialization Failed
-          </span>
-          <p className="text-[10px] text-slate-400 leading-relaxed max-h-16 overflow-y-auto w-full break-words">
-            {cameraError}
-          </p>
-          <div className="mt-2 text-[8.5px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono select-all w-full break-all">
-            Check local site settings or check secure domain contexts (https)
-          </div>
-        </div>
-      )}
-
-      {cameraPermissionState === "granted" && (
-        /* Green viewfinder square center border */
-        <div className="absolute inset-8 border border-dashed border-teal-400/40 rounded flex items-center justify-center pointer-events-none z-10">
-          <span className="text-[9px] bg-black/60 text-teal-400 px-1.5 py-0.5 border border-teal-500/20 rounded font-mono uppercase tracking-widest leading-none font-black animate-pulse">
-            [ LIVE SCANNING VIEWPORT ]
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}

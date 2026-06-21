@@ -6,7 +6,6 @@ import {
   Sliders, Calendar, FileText, Send, Camera, ArrowLeftRight, LogOut
 } from "lucide-react";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
-import { useZxing } from "react-zxing";
 
 import { db, assetsCol, transactionsCol, handoversCol } from "../firebase";
 import { SmartphoneLogo } from "./Header";
@@ -50,9 +49,6 @@ export default function AgentPortal({
   const [selectedAssetId, setSelectedAssetId] = useState("");
   const [issueRemarks, setIssueRemarks] = useState("");
   const [returnRemarks, setReturnRemarks] = useState("");
-
-  // Scanner Simulator State
-  const [showScanner, setShowScanner] = useState(false);
 
   // Device Handover State hooks
   const [activeHandoverAssetId, setActiveHandoverAssetId] = useState<string | null>(null);
@@ -244,17 +240,6 @@ export default function AgentPortal({
       console.error("Portal self-return failed", err);
       alert("Could not process returned status. Please reload portal.");
     }
-  };
-
-  // Scanner Simulator Scanner Code selection
-  const handleSimulatedScan = (scannedId: string) => {
-    let finalId = scannedId;
-    if (typeof scannedId !== "string") {
-      finalId = String(scannedId);
-    }
-    const assetIdUpper = finalId.toUpperCase().trim();
-    setSelectedAssetId(assetIdUpper);
-    setShowScanner(false);
   };
 
   // Initiate direct device handover with target agent verification
@@ -925,13 +910,6 @@ export default function AgentPortal({
                   <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
                     Assigned Device Desk Checkout
                   </h3>
-                  <button
-                    onClick={() => setShowScanner(true)}
-                    className="flex items-center gap-1 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-[10px] font-semibold cursor-pointer"
-                  >
-                    <Camera className="w-3 h-3" />
-                    Barcode Scan
-                  </button>
                 </div>
 
                 {availableAssets.length === 0 ? (
@@ -1240,144 +1218,6 @@ export default function AgentPortal({
               )}
             </div>
           )}
-        </div>
-      )}
-
-      {/* Simulator Scan Modal */}
-      {showScanner && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 text-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
-                <Camera className="w-4 h-4 text-teal-400 animate-pulse" />
-                Shift Cabinet Camera Scanner Simulator
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowScanner(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="bg-black/40 border border-slate-800 rounded-xl aspect-video relative overflow-hidden mb-4 flex flex-col items-center justify-center text-center p-4">
-              <div className="absolute top-0 inset-x-0 h-0.5 bg-teal-400 shadow-md shadow-teal-400/50 animate-bounce" />
-              <VideoSimulator onScan={handleSimulatedScan} />
-            </div>
-
-            <div className="space-y-4">
-              <span className="text-[10px] font-bold text-slate-450 text-slate-400 block pb-1 border-b border-slate-800 uppercase tracking-wider">
-                Simulated Sandbox Payloads:
-              </span>
-              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
-                {availableAssets.length === 0 ? (
-                  <p className="text-[10px] text-slate-400 col-span-2 italic">No assets available to scan.</p>
-                ) : (
-                  availableAssets.map((asset) => (
-                    <button
-                      key={asset.id}
-                      onClick={() => handleSimulatedScan(asset.id)}
-                      className="p-2 border border-slate-800 bg-slate-800/50 hover:bg-slate-850 hover:bg-slate-800 rounded-xl text-left text-xs text-slate-200 truncate transition-colors cursor-pointer"
-                    >
-                      🚀 Scan {asset.id} <span className="text-[9px] text-slate-400 font-serif block">({asset.name})</span>
-                    </button>
-                  ))
-                )}
-              </div>
-
-              <button
-                onClick={() => setShowScanner(false)}
-                className="w-full mt-2 p-2 border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold rounded-xl"
-              >
-                Cancel Scanner Stream
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function VideoSimulator({ onScan }: { onScan: (id: string) => void }) {
-  const [cameraPermissionState, setCameraPermissionState] = useState<"pending" | "granted" | "denied">("pending");
-  const [cameraError, setCameraError] = useState<string | null>(null);
-
-  const isScanningRef = useRef(true);
-
-  useEffect(() => {
-    isScanningRef.current = true;
-  }, []);
-
-  const { ref } = useZxing({
-    onDecodeResult(result: any) {
-      if (!isScanningRef.current) return;
-      isScanningRef.current = false;
-      const text = result.getText ? result.getText() : (result.text || result.rawValue || result);
-      onScan(typeof text === "string" ? text : String(text));
-    },
-    onError(error: any) {
-      if (
-        error.name === "NotAllowedError" ||
-        error.name === "NotFoundError" ||
-        error.name === "NotReadableError"
-      ) {
-        setCameraPermissionState("denied");
-        setCameraError(error.message || "Permissions blocked or no camera detected.");
-      }
-    }
-  });
-
-  useEffect(() => {
-    // There is no explicit "granted" callback in useZxing, but video stream will start.
-    // If we have video stream (i.e. ref element has srcObject), we consider it granted.
-    const pollDevice = setInterval(() => {
-      if (ref.current && ref.current.srcObject) {
-        setCameraPermissionState("granted");
-        clearInterval(pollDevice);
-      }
-    }, 500);
-    return () => clearInterval(pollDevice);
-  }, [ref]);
-
-  return (
-    <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-slate-950">
-      <video ref={ref} className="w-full h-full object-cover" muted playsInline />
-      
-      {cameraPermissionState === "pending" && (
-        <div className="flex flex-col items-center opacity-75 p-4 text-center z-10 absolute inset-0 justify-center pointer-events-none">
-          <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mb-3" />
-          <span className="font-mono text-[9px] tracking-widest text-[#2dd4bf] font-bold">
-            CONNECTING SHIFT SCAN CAMERA...
-          </span>
-          <span className="text-[9px] text-slate-500 mt-1 font-semibold">Please authorize web devices permissions</span>
-        </div>
-      )}
-
-      {cameraPermissionState === "denied" && (
-        <div className="flex flex-col items-center p-4 text-center max-w-xs z-10 space-y-2 absolute inset-0 justify-center">
-          <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-full mb-1">
-            <Camera className="w-6 h-6 shrink-0" />
-          </div>
-          <span className="font-bold text-[11px] text-rose-400 uppercase tracking-wider block">
-            Camera Initialization Failed
-          </span>
-          <p className="text-[10px] text-slate-400 leading-relaxed max-h-16 overflow-y-auto w-full break-words">
-            {cameraError}
-          </p>
-          <div className="mt-2 text-[8.5px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono select-all w-full break-all">
-            Check local site settings or check secure domain contexts (https)
-          </div>
-        </div>
-      )}
-
-      {cameraPermissionState === "granted" && (
-        /* Green viewfinder square center border */
-        <div className="absolute inset-8 border border-dashed border-teal-400/40 rounded flex items-center justify-center pointer-events-none z-10">
-          <span className="text-[9px] bg-black/60 text-teal-400 px-1.5 py-0.5 border border-teal-500/20 rounded font-mono uppercase tracking-widest leading-none font-black animate-pulse">
-            [ LIVE SCANNING VIEWPORT ]
-          </span>
         </div>
       )}
     </div>
