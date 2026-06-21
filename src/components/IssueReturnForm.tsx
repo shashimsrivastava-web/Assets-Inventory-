@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Asset, Agent, Transaction, AssetStatus } from "../types";
 import { ArrowUpRight, ArrowDownLeft, Calendar, FileText, Clock, HelpCircle, CheckCircle, AlertTriangle, Play, Smartphone, BookOpen, Camera, Search, User, Clipboard, Sliders, ArrowLeftRight } from "lucide-react";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
@@ -1130,8 +1130,12 @@ function VideoSimulator({ onScan }: { onScan: (id: string) => void }) {
   const [cameraPermissionState, setCameraPermissionState] = useState<"pending" | "granted" | "denied">("pending");
   const [cameraError, setCameraError] = useState<string | null>(null);
 
+  const isScanningRef = useRef(true);
+
   const { ref } = useZxing({
     onDecodeResult(result: any) {
+      if (!isScanningRef.current) return;
+      isScanningRef.current = false;
       onScan(result.getText ? result.getText() : result.rawValue);
     },
     onError(error: any) {

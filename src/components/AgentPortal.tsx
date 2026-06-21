@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Asset, Agent, Transaction, AssetStatus, Handover } from "../types";
 import { 
   Key, ArrowUpRight, ArrowDownLeft, Clock, History, LogIn, 
@@ -1297,8 +1297,12 @@ function VideoSimulator({ onScan }: { onScan: (id: string) => void }) {
   const [cameraPermissionState, setCameraPermissionState] = useState<"pending" | "granted" | "denied">("pending");
   const [cameraError, setCameraError] = useState<string | null>(null);
 
+  const isScanningRef = useRef(true);
+
   const { ref } = useZxing({
     onDecodeResult(result: any) {
+      if (!isScanningRef.current) return;
+      isScanningRef.current = false;
       onScan(result.getText ? result.getText() : result.rawValue);
     },
     onError(error: any) {
