@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Asset, Agent, Transaction, AssetStatus } from "../types";
-import { Tablet, Smartphone, CreditCard, Shield, Laptop, AlertCircle, FileSpreadsheet, Search, CheckCircle, RefreshCw, AlertTriangle, Layers, Clock, HelpCircle, Layout, Scan } from "lucide-react";
+import { Tablet, Smartphone, CreditCard, Shield, Laptop, AlertCircle, FileSpreadsheet, Search, CheckCircle, RefreshCw, AlertTriangle, Layers, Clock, HelpCircle, Layout, Scan, Camera } from "lucide-react";
 
 interface DashboardProps {
   assets: Asset[];
@@ -19,7 +19,34 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
     const term = searchTerm.toLowerCase();
     const activeAss = transactions.find(t => t.id === device.currentAssignmentId);
 
-    const matchesType = selectedDeviceType === "All" || device.type === selectedDeviceType;
+    let matchesType = false;
+    if (selectedDeviceType === "All") {
+      matchesType = true;
+    } else if (selectedDeviceType === "iPad") {
+      const typeLower = (device.type || "").toLowerCase();
+      const nameLower = (device.name || "").toLowerCase();
+      matchesType = typeLower.includes("ipad") || typeLower.includes("pda") ||
+                    nameLower.includes("ipad") || nameLower.includes("pda");
+    } else if (selectedDeviceType === "Ingenico") {
+      const typeLower = (device.type || "").toLowerCase();
+      const nameLower = (device.name || "").toLowerCase();
+      matchesType = typeLower.includes("ingenico") || nameLower.includes("ingenico");
+    } else if (selectedDeviceType === "Mobile Phone") {
+      const typeLower = (device.type || "").toLowerCase().trim();
+      matchesType = typeLower === "mobile phone";
+    } else if (selectedDeviceType === "Scanner") {
+      const typeLower = (device.type || "").toLowerCase();
+      const nameLower = (device.name || "").toLowerCase();
+      matchesType = typeLower.includes("scanner") || nameLower.includes("scanner") ||
+                    typeLower.includes("scan") || nameLower.includes("scan");
+    } else if (selectedDeviceType === "Hold Camera Phone") {
+      const typeLower = (device.type || "").toLowerCase();
+      const nameLower = (device.name || "").toLowerCase();
+      matchesType = typeLower.includes("hold") || nameLower.includes("hold") ||
+                    typeLower.includes("camera") || nameLower.includes("camera");
+    } else {
+      matchesType = device.type === selectedDeviceType;
+    }
 
     const matchesText =
       device.id.toLowerCase().includes(term) ||
@@ -34,9 +61,37 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
 
   // Summary Metrics calculations
   const totalDevices = assets.length;
-  const totalIpads = assets.filter((a) => a.type === "iPad").length;
-  const totalIngenicos = assets.filter((a) => a.type === "Ingenico").length;
-  const totalPhones = assets.filter((a) => a.type === "Mobile Phone").length;
+  const totalIpads = assets.filter((a) => {
+    const typeLower = (a.type || "").toLowerCase();
+    const nameLower = (a.name || "").toLowerCase();
+    return typeLower.includes("ipad") || typeLower.includes("pda") ||
+           nameLower.includes("ipad") || nameLower.includes("pda");
+  }).length;
+
+  const totalIngenicos = assets.filter((a) => {
+    const typeLower = (a.type || "").toLowerCase();
+    const nameLower = (a.name || "").toLowerCase();
+    return typeLower.includes("ingenico") || nameLower.includes("ingenico");
+  }).length;
+
+  const totalPhones = assets.filter((a) => {
+    const typeLower = (a.type || "").toLowerCase().trim();
+    return typeLower === "mobile phone";
+  }).length;
+
+  const totalScanners = assets.filter((a) => {
+    const typeLower = (a.type || "").toLowerCase();
+    const nameLower = (a.name || "").toLowerCase();
+    return typeLower.includes("scanner") || nameLower.includes("scanner") ||
+           typeLower.includes("scan") || nameLower.includes("scan");
+  }).length;
+
+  const totalHoldCameraPhones = assets.filter((a) => {
+    const typeLower = (a.type || "").toLowerCase();
+    const nameLower = (a.name || "").toLowerCase();
+    return typeLower.includes("hold") || nameLower.includes("hold") ||
+           typeLower.includes("camera") || nameLower.includes("camera");
+  }).length;
   
   const devicesIssued = assets.filter((a) => a.status === AssetStatus.ISSUED).length;
   const devicesAvailable = assets.filter((a) => a.status === AssetStatus.IN_OFFICE).length;
@@ -109,8 +164,8 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
 
   return (
     <div id="live-dashboard-pane" className="space-y-6">
-      {/* 9 Summary Cards Grid */}
-      <div id="dashboard-metrics-grid" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      {/* 11 Summary Cards Grid */}
+      <div id="dashboard-metrics-grid" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-col justify-between">
           <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Total Devices</span>
           <div className="flex justify-between items-baseline mt-2">
@@ -140,6 +195,22 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
           <div className="flex justify-between items-baseline mt-2">
             <span className="text-2xl font-bold text-slate-900">{totalPhones}</span>
             <Smartphone className="w-4 h-4 text-slate-400" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-col justify-between">
+          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Total Scanners</span>
+          <div className="flex justify-between items-baseline mt-2">
+            <span className="text-2xl font-bold text-slate-900">{totalScanners}</span>
+            <Scan className="w-4 h-4 text-slate-400" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-col justify-between">
+          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Hold Camera Phones</span>
+          <div className="flex justify-between items-baseline mt-2">
+            <span className="text-2xl font-bold text-slate-900">{totalHoldCameraPhones}</span>
+            <Camera className="w-4 h-4 text-slate-400" />
           </div>
         </div>
 
@@ -176,7 +247,7 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-col justify-between col-span-2 md:col-span-1">
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-col justify-between md:col-span-1">
           <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Not Taken Device</span>
           <div className="flex justify-between items-baseline mt-2">
             <span className="text-2xl font-bold text-slate-450">{devicesNotTaken}</span>
@@ -264,9 +335,11 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
             className="px-3.5 py-2 text-xs border border-slate-200 bg-white rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-slate-700 cursor-pointer font-semibold"
           >
             <option value="All">All Types</option>
-            <option value="iPad">iPads</option>
+            <option value="iPad">iPads / PDAs</option>
             <option value="Ingenico">Ingenico POS</option>
             <option value="Mobile Phone">Mobile Phones</option>
+            <option value="Scanner">Scanners</option>
+            <option value="Hold Camera Phone">Hold Camera Phones</option>
           </select>
 
           <button
