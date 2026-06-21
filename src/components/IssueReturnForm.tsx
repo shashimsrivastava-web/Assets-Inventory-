@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Asset, Agent, Transaction, AssetStatus } from "../types";
 import { ArrowUpRight, ArrowDownLeft, Calendar, FileText, Clock, HelpCircle, CheckCircle, AlertTriangle, Play, Smartphone, BookOpen, Camera, Search, User, Clipboard, Sliders, ArrowLeftRight } from "lucide-react";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
@@ -23,6 +23,7 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
   const [selectedAgentId, setSelectedAgentId] = useState("");
 
   // Form states - Issue
+  const [selectedDeviceType, setSelectedDeviceType] = useState<string>("All");
   const [issueAssetId, setIssueAssetId] = useState("");
   const [issueRemarks, setIssueRemarks] = useState("");
   const [issueShift, setIssueShift] = useState(activeShift);
@@ -424,6 +425,17 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 
   const availableAssetsForIssue = assets.filter((a) => a.status !== AssetStatus.ISSUED && a.status !== AssetStatus.MISSING);
 
+  const deviceTypes = useMemo(() => {
+    const types = new Set<string>();
+    availableAssetsForIssue.forEach(a => types.add(a.type));
+    return ["All", ...Array.from(types).sort()];
+  }, [availableAssetsForIssue]);
+
+  const filteredAssetsForIssue = useMemo(() => {
+    if (selectedDeviceType === "All") return availableAssetsForIssue;
+    return availableAssetsForIssue.filter(a => a.type === selectedDeviceType);
+  }, [availableAssetsForIssue, selectedDeviceType]);
+
   return (
     <div id="issue-return-control" className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-md flex flex-col">
       
@@ -579,32 +591,50 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                     </span>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Device Asset ID *</label>
-                    <div className="flex gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Filter by Device Type</label>
                       <select
-                        value={issueAssetId}
-                        onChange={(e) => setIssueAssetId(e.target.value)}
-                        className="flex-1 h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-emerald-500 font-extrabold font-mono text-slate-800 shadow-3xs cursor-pointer"
-                        required
-                        id="issue-asset-select"
+                        value={selectedDeviceType}
+                        onChange={(e) => {
+                          setSelectedDeviceType(e.target.value);
+                          setIssueAssetId("");
+                        }}
+                        className="w-full h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-emerald-500 font-extrabold text-slate-800 shadow-3xs cursor-pointer"
                       >
-                        <option value="" className="font-sans">-- Choose available device to issue --</option>
-                        {availableAssetsForIssue.map((asset) => (
-                          <option key={asset.id} value={asset.id}>
-                            [{asset.id}] - {asset.name} ({asset.type})
-                          </option>
+                        {deviceTypes.map(type => (
+                          <option key={type} value={type}>{type}</option>
                         ))}
                       </select>
-                      {issueAssetId && (
-                        <button
-                          type="button"
-                          onClick={() => setIssueAssetId("")}
-                          className="px-4 text-xs font-bold border border-slate-300 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 rounded-xl transition-all h-12 cursor-pointer shadow-3xs"
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Device Asset ID *</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={issueAssetId}
+                          onChange={(e) => setIssueAssetId(e.target.value)}
+                          className="flex-1 h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-emerald-500 font-extrabold font-mono text-slate-800 shadow-3xs cursor-pointer"
+                          required
+                          id="issue-asset-select"
                         >
-                          Clear
-                        </button>
-                      )}
+                          <option value="" className="font-sans">-- Choose available device to issue --</option>
+                          {filteredAssetsForIssue.map((asset) => (
+                            <option key={asset.id} value={asset.id}>
+                              [{asset.id}] - {asset.name} ({asset.type})
+                            </option>
+                          ))}
+                        </select>
+                        {issueAssetId && (
+                          <button
+                            type="button"
+                            onClick={() => setIssueAssetId("")}
+                            className="px-4 text-xs font-bold border border-slate-300 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 rounded-xl transition-all h-12 cursor-pointer shadow-3xs"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -803,13 +833,13 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                 {/* Available Assets autofill list */}
                 <div>
                   <span className="text-[11px] uppercase font-bold text-emerald-900 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-md inline-block mb-3 tracking-wider font-sans">
-                    Available Devices ({availableAssetsForIssue.length})
+                    Available Devices ({filteredAssetsForIssue.length})
                   </span>
-                  {availableAssetsForIssue.length === 0 ? (
-                    <span className="text-xs text-slate-400 italic block py-4 bg-white rounded-xl text-center border border-dashed border-slate-200">All assets issued.</span>
+                  {filteredAssetsForIssue.length === 0 ? (
+                    <span className="text-xs text-slate-400 italic block py-4 bg-white rounded-xl text-center border border-dashed border-slate-200">No matching assets found.</span>
                   ) : (
                     <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
-                      {availableAssetsForIssue.slice(0, 15).map((asset) => (
+                      {filteredAssetsForIssue.slice(0, 15).map((asset) => (
                         <button
                           key={asset.id}
                           type="button"

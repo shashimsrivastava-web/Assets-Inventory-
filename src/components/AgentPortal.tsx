@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Asset, Agent, Transaction, AssetStatus, Handover } from "../types";
 import { 
   Key, ArrowUpRight, ArrowDownLeft, Clock, History, LogIn, 
@@ -46,6 +46,7 @@ export default function AgentPortal({
   const [deskTab, setDeskTab] = useState<"operations" | "history">("operations");
 
   // Form states inside portal
+  const [selectedDeviceType, setSelectedDeviceType] = useState<string>("All");
   const [selectedAssetId, setSelectedAssetId] = useState("");
   const [issueRemarks, setIssueRemarks] = useState("");
   const [returnRemarks, setReturnRemarks] = useState("");
@@ -422,6 +423,17 @@ export default function AgentPortal({
 
   // Fetch lists
   const availableAssets = assets.filter((a) => a.status === AssetStatus.IN_OFFICE);
+  
+  const deviceTypes = useMemo(() => {
+    const types = new Set<string>();
+    availableAssets.forEach(a => types.add(a.type));
+    return ["All", ...Array.from(types).sort()];
+  }, [availableAssets]);
+
+  const filteredAssets = useMemo(() => {
+    if (selectedDeviceType === "All") return availableAssets;
+    return availableAssets.filter(a => a.type === selectedDeviceType);
+  }, [availableAssets, selectedDeviceType]);
   
   // Calculate specific custody held by the logged-in agent
   const myDevicesHeld = currentAgent
@@ -920,23 +932,43 @@ export default function AgentPortal({
                   </div>
                 ) : (
                   <form onSubmit={handleSelfIssueSubmit} className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 mb-1.5">
-                        Choose Available Device from Cabinet
-                      </label>
-                      <select
-                        value={selectedAssetId}
-                        onChange={(e) => setSelectedAssetId(e.target.value)}
-                        className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-xs font-medium text-slate-700 uppercase cursor-pointer"
-                        required
-                      >
-                        <option value="">-- Choose hardware item --</option>
-                        {availableAssets.map((asset) => (
-                          <option key={asset.id} value={asset.id}>
-                            [{asset.id}] - {asset.name} ({asset.type})
-                          </option>
-                        ))}
-                      </select>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                          Filter by Device Type
+                        </label>
+                        <select
+                          value={selectedDeviceType}
+                          onChange={(e) => {
+                            setSelectedDeviceType(e.target.value);
+                            setSelectedAssetId("");
+                          }}
+                          className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-xs font-medium text-slate-700 cursor-pointer"
+                        >
+                          {deviceTypes.map(type => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                          Choose Available Device from Cabinet
+                        </label>
+                        <select
+                          value={selectedAssetId}
+                          onChange={(e) => setSelectedAssetId(e.target.value)}
+                          className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-xs font-medium text-slate-700 uppercase cursor-pointer"
+                          required
+                        >
+                          <option value="">-- Choose hardware item --</option>
+                          {filteredAssets.map((asset) => (
+                            <option key={asset.id} value={asset.id}>
+                              [{asset.id}] - {asset.name} ({asset.type})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
 
                     {/* Quick Select Buttons */}
@@ -945,20 +977,24 @@ export default function AgentPortal({
                         Quick Pick Desk Cards:
                       </span>
                       <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                        {availableAssets.slice(0, 6).map((asset) => (
-                          <button
-                            key={asset.id}
-                            type="button"
-                            onClick={() => setSelectedAssetId(asset.id)}
-                            className={`px-2 py-1 border rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
-                              selectedAssetId === asset.id
-                                ? "bg-indigo-600 border-indigo-600 text-white"
-                                : "bg-white hover:bg-slate-50 border-slate-200 text-slate-800"
-                            }`}
-                          >
-                            {asset.id}
-                          </button>
-                        ))}
+                        {filteredAssets.length === 0 ? (
+                          <span className="text-[10px] text-slate-400 italic">No devices match selected type.</span>
+                        ) : (
+                          filteredAssets.slice(0, 6).map((asset) => (
+                            <button
+                              key={asset.id}
+                              type="button"
+                              onClick={() => setSelectedAssetId(asset.id)}
+                              className={`px-2 py-1 border rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                                selectedAssetId === asset.id
+                                  ? "bg-indigo-600 border-indigo-600 text-white"
+                                  : "bg-white hover:bg-slate-50 border-slate-200 text-slate-800"
+                              }`}
+                            >
+                              {asset.id}
+                            </button>
+                          ))
+                        )}
                       </div>
                     </div>
 
