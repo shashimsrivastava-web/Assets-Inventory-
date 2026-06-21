@@ -924,22 +924,19 @@ export default function AgentPortal({
                       <label className="block text-xs font-semibold text-slate-500 mb-1.5">
                         Choose Available Device from Cabinet
                       </label>
-                      <input
-                        type="text"
-                        list="cabinet-assets"
+                      <select
                         value={selectedAssetId}
-                        onChange={(e) => setSelectedAssetId(e.target.value.toUpperCase())}
-                        className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-xs font-medium text-slate-700 uppercase"
+                        onChange={(e) => setSelectedAssetId(e.target.value)}
+                        className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl text-xs font-medium text-slate-700 uppercase cursor-pointer"
                         required
-                        placeholder="Scan or choose hardware item..."
-                      />
-                      <datalist id="cabinet-assets">
+                      >
+                        <option value="">-- Choose hardware item --</option>
                         {availableAssets.map((asset) => (
                           <option key={asset.id} value={asset.id}>
-                            {asset.name} ({asset.type})
+                            [{asset.id}] - {asset.name} ({asset.type})
                           </option>
                         ))}
-                      </datalist>
+                      </select>
                     </div>
 
                     {/* Quick Select Buttons */}

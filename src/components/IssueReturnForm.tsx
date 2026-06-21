@@ -582,23 +582,20 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Device Asset ID *</label>
                     <div className="flex gap-2">
-                      <input
-                        type="text"
-                        list="available-assets"
+                      <select
                         value={issueAssetId}
-                        onChange={(e) => setIssueAssetId(e.target.value.toUpperCase())}
-                        className="flex-1 h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-emerald-500 font-extrabold font-mono text-slate-800 uppercase shadow-3xs"
+                        onChange={(e) => setIssueAssetId(e.target.value)}
+                        className="flex-1 h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-emerald-500 font-extrabold font-mono text-slate-800 shadow-3xs cursor-pointer"
                         required
-                        placeholder="Select or SCAN barcode..."
                         id="issue-asset-select"
-                      />
-                      <datalist id="available-assets">
+                      >
+                        <option value="" className="font-sans">-- Choose available device to issue --</option>
                         {availableAssetsForIssue.map((asset) => (
                           <option key={asset.id} value={asset.id}>
-                            {asset.name} ({asset.type})
+                            [{asset.id}] - {asset.name} ({asset.type})
                           </option>
                         ))}
-                      </datalist>
+                      </select>
                       {issueAssetId && (
                         <button
                           type="button"
@@ -667,22 +664,19 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Choose Device held by {currentAgent?.name} *</label>
-                    <input
-                      type="text"
-                      list="held-assets"
+                    <select
                       value={returnAssetId}
-                      onChange={(e) => setReturnAssetId(e.target.value.toUpperCase())}
-                      className="w-full h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-indigo-505 font-bold font-mono text-slate-850 uppercase shadow-3xs"
+                      onChange={(e) => setReturnAssetId(e.target.value)}
+                      className="w-full h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-indigo-505 font-bold font-mono text-slate-850 shadow-3xs cursor-pointer"
                       required
-                      placeholder="Select or SCAN return device..."
-                    />
-                    <datalist id="held-assets">
+                    >
+                      <option value="" className="font-sans text-slate-500">-- Choose returning device --</option>
                       {agentHeldAssets.map((asset) => (
                         <option key={asset.id} value={asset.id}>
-                          {asset.name} ({asset.type})
+                          [{asset.id}] - {asset.name} ({asset.type})
                         </option>
                       ))}
-                    </datalist>
+                    </select>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -738,22 +732,19 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Choose Device held by {currentAgent?.name} *</label>
-                    <input
-                      type="text"
-                      list="handover-assets"
+                    <select
                       value={handoverAssetId}
-                      onChange={(e) => setHandoverAssetId(e.target.value.toUpperCase())}
-                      className="w-full h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold font-mono text-slate-800 uppercase shadow-3xs"
+                      onChange={(e) => setHandoverAssetId(e.target.value)}
+                      className="w-full h-12 px-4 border border-slate-300 bg-white rounded-xl text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold font-mono text-slate-800 shadow-3xs cursor-pointer"
                       required
-                      placeholder="Select or SCAN handover device..."
-                    />
-                    <datalist id="handover-assets">
+                    >
+                      <option value="" className="font-sans text-slate-500">-- Choose device to hand over --</option>
                       {agentHeldAssets.map((asset) => (
                         <option key={asset.id} value={asset.id}>
-                          {asset.name} ({asset.type})
+                          [{asset.id}] - {asset.name} ({asset.type})
                         </option>
                       ))}
-                    </datalist>
+                    </select>
                   </div>
 
                   <div>
