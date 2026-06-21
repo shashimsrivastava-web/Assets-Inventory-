@@ -6,7 +6,7 @@ import {
   Sliders, Calendar, FileText, Send, Camera, ArrowLeftRight, LogOut
 } from "lucide-react";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import { useZxing } from "react-zxing";
 
 import { db, assetsCol, transactionsCol, handoversCol } from "../firebase";
 import { SmartphoneLogo } from "./Header";
@@ -1297,73 +1297,50 @@ function VideoSimulator({ onScan }: { onScan: (id: string) => void }) {
   const [cameraPermissionState, setCameraPermissionState] = useState<"pending" | "granted" | "denied">("pending");
   const [cameraError, setCameraError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let html5QrCode: Html5Qrcode | null = null;
-    let isScanning = true;
-    const scannerRef = { current: false }; // Track if scanner is running
-
-    async function enableScanner() {
-      try {
-        setCameraPermissionState("pending");
-        html5QrCode = new Html5Qrcode("reader", {
-          experimentalFeatures: {
-            useBarCodeDetectorIfSupported: true
-          }
-        } as any);
-        
-        await html5QrCode.start(
-          { facingMode: "environment" },
-          { 
-            fps: 20
-          },
-          (decodedText) => {
-            if (!isScanning) return;
-            isScanning = false;
-            onScan(decodedText);
-            if (scannerRef.current) {
-              scannerRef.current = false;
-              html5QrCode?.stop().catch(console.error);
-            }
-          },
-          (errorMessage) => {
-            // console.log(errorMessage);
-          }
-        );
-        scannerRef.current = true;
-        setCameraPermissionState("granted");
-      } catch (err: any) {
-        console.error("Scanner initialization failed:", err);
+  const { ref } = useZxing({
+    onDecodeResult(result: any) {
+      onScan(result.getText ? result.getText() : result.rawValue);
+    },
+    onError(error: any) {
+      if (
+        error.name === "NotAllowedError" ||
+        error.name === "NotFoundError" ||
+        error.name === "NotReadableError"
+      ) {
         setCameraPermissionState("denied");
-        setCameraError(err.message || "Permissions blocked or no camera detected.");
+        setCameraError(error.message || "Permissions blocked or no camera detected.");
       }
     }
+  });
 
-    enableScanner();
-
-    return () => {
-      if (scannerRef.current) {
-        scannerRef.current = false;
-        html5QrCode?.stop().catch(console.error);
+  useEffect(() => {
+    // There is no explicit "granted" callback in useZxing, but video stream will start.
+    // If we have video stream (i.e. ref element has srcObject), we consider it granted.
+    const pollDevice = setInterval(() => {
+      if (ref.current && ref.current.srcObject) {
+        setCameraPermissionState("granted");
+        clearInterval(pollDevice);
       }
-    };
-  }, [onScan]);
+    }, 500);
+    return () => clearInterval(pollDevice);
+  }, [ref]);
 
   return (
     <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-slate-950">
-      <div id="reader" className="w-full h-full"></div>
+      <video ref={ref} className="w-full h-full object-cover" muted playsInline />
       
       {cameraPermissionState === "pending" && (
-        <div className="flex flex-col items-center opacity-75 p-4 text-center z-10">
+        <div className="flex flex-col items-center opacity-75 p-4 text-center z-10 absolute inset-0 justify-center pointer-events-none">
           <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mb-3" />
           <span className="font-mono text-[9px] tracking-widest text-[#2dd4bf] font-bold">
-            CONNECTING SHIFT CABINET CAMERA...
+            CONNECTING SHIFT SCAN CAMERA...
           </span>
           <span className="text-[9px] text-slate-500 mt-1 font-semibold">Please authorize web devices permissions</span>
         </div>
       )}
 
       {cameraPermissionState === "denied" && (
-        <div className="flex flex-col items-center p-4 text-center max-w-xs z-10 space-y-2">
+        <div className="flex flex-col items-center p-4 text-center max-w-xs z-10 space-y-2 absolute inset-0 justify-center">
           <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-full mb-1">
             <Camera className="w-6 h-6 shrink-0" />
           </div>
