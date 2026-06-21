@@ -602,6 +602,7 @@ export default function App() {
               transactions={transactions}
               loading={loading}
               onRefresh={handleForceSync}
+              role={role}
             />
           )}
 

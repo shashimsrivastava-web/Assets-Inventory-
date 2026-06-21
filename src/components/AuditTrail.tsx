@@ -1,18 +1,27 @@
 import React, { useState } from "react";
 import { Transaction } from "../types";
-import { Search, Download, FileSpreadsheet, Printer, Activity, ClipboardList, RefreshCw, Calendar, Clock, RotateCcw } from "lucide-react";
+import { Search, Download, FileSpreadsheet, Printer, Activity, ClipboardList, RefreshCw, Calendar, Clock, RotateCcw, Trash2, Shield } from "lucide-react";
+import { db } from "../firebase";
+import { deleteDoc, doc, updateDoc } from "firebase/firestore";
 
 interface AuditTrailProps {
   transactions: Transaction[];
   loading: boolean;
   onRefresh: () => void;
+  role?: "Admin" | "Supervisor";
 }
 
-export default function AuditTrail({ transactions, loading, onRefresh }: AuditTrailProps) {
+export default function AuditTrail({ transactions, loading, onRefresh, role = "Supervisor" }: AuditTrailProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedType, setSelectedType] = useState("All");
   const [selectedShift, setSelectedShift] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
+  
+  // Admin Purge States
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [passcode, setPasscode] = useState("");
+  const [passcodeError, setPasscodeError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -176,6 +185,66 @@ export default function AuditTrail({ transactions, loading, onRefresh }: AuditTr
     return `${hrs}h ${mins}m`;
   };
 
+  // Pre-calculate items older than 2 days
+  const cutoff = Date.now() - 2 * 24 * 60 * 60 * 1000;
+  const legacyCount = transactions.filter(t => t.issueTimestamp < cutoff).length;
+
+  const handleClearTrash = async () => {
+    setIsDeleting(true);
+    setPasscodeError("");
+    
+    const cutoffDate = Date.now() - 2 * 24 * 60 * 60 * 1000;
+    const oldTransactions = transactions.filter(t => t.issueTimestamp < cutoffDate);
+    
+    try {
+      let deletedCount = 0;
+      let assetUpdatesCount = 0;
+      
+      for (const tx of oldTransactions) {
+        // Safe check: if this transaction is the active assignment of an asset,
+        // we'll update the asset state to prevent dangling references.
+        if (tx.status !== "Returned") {
+          try {
+            await updateDoc(doc(db, "assets", tx.assetId), {
+              currentAssignmentId: null,
+              status: "In Office"
+            });
+            assetUpdatesCount++;
+          } catch (err) {
+            console.error(`Could not clean active assignment on asset ${tx.assetId}:`, err);
+          }
+        }
+        
+        // Delete the transaction doc
+        await deleteDoc(doc(db, "transactions", tx.id));
+        deletedCount++;
+      }
+      
+      alert(`Successfully purged ${deletedCount} historic transaction logs older than 2 days from the secure repository.${assetUpdatesCount > 0 ? ` Resolved ${assetUpdatesCount} active custody bindings.` : ""}`);
+      setShowClearModal(false);
+      setPasscode("");
+      onRefresh(); // Trigger force sync/refresh callback
+    } catch (error) {
+      console.error("Purging transactional databases failed:", error);
+      alert("Error: Insufficient database clearance or internet connection issue.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleVerifyAndClear = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (role === "Admin") {
+      handleClearTrash();
+    } else {
+      if (passcode.trim() === "Admin220!") {
+        handleClearTrash();
+      } else {
+        setPasscodeError("Invalid Administrator passcode credentials.");
+      }
+    }
+  };
+
   return (
     <div id="audit-trail-control" className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -187,6 +256,18 @@ export default function AuditTrail({ transactions, loading, onRefresh }: AuditTr
           <p className="text-slate-500 text-xs mt-1">Immutable transaction ledger capturing all issuances and checkouts.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              setPasscodeError("");
+              setPasscode("");
+              setShowClearModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 border border-rose-200 text-rose-705 text-rose-700 bg-rose-50 hover:bg-rose-100 hover:border-rose-350 hover:text-rose-900 font-bold rounded-xl text-xs transition-all cursor-pointer shadow-3xs"
+            title="Clear all transactions and logs older than 2 days"
+          >
+            <Trash2 className="w-4 h-4 text-rose-605 text-rose-600 animate-pulse shrink-0" />
+            <span>Purge History {legacyCount > 0 && `(${legacyCount})`}</span>
+          </button>
           <button
             onClick={onRefresh}
             className="p-2 border border-slate-205 hover:border-indigo-200 bg-white text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/10 rounded-xl transition-colors cursor-pointer border border-slate-200"
@@ -402,6 +483,84 @@ export default function AuditTrail({ transactions, loading, onRefresh }: AuditTr
           </tbody>
         </table>
       </div>
+
+      {showClearModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-2xl max-w-md w-full text-center space-y-6">
+            <div className="space-y-2">
+              <div className="flex justify-center mb-1">
+                <div className="p-3 bg-rose-50 border border-rose-100 rounded-2xl text-rose-700 shadow-sm animate-bounce">
+                  <Shield className="w-8 h-8 text-rose-600" />
+                </div>
+              </div>
+              <h2 className="text-xl font-extrabold text-slate-900 font-sans tracking-tight">
+                {role === "Admin" ? "Confirm Legacy Purge" : "Admin Credentials Required"}
+              </h2>
+              <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+                {role === "Admin" ? (
+                  `You are about to permanently clear all transaction logs and device history records older than 2 days. This will purge ${legacyCount} items.`
+                ) : (
+                  `Purging historic logs is strictly restricted to Administrator capabilities. Please enter the live terminal passcode to authorize deleting ${legacyCount} legacy records:`
+                )}
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyAndClear} className="space-y-4 text-left font-sans">
+              {role !== "Admin" && (
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1.5 tracking-wider font-sans">
+                    Admin Terminal Passcode
+                  </label>
+                  <input
+                    type="password"
+                    value={passcode}
+                    onChange={(e) => setPasscode(e.target.value)}
+                    placeholder="••••••••••••"
+                    required
+                    className="w-full h-12 px-4 bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 rounded-xl text-sm font-semibold tracking-wide transition-all text-center font-mono"
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              {passcodeError && (
+                <div className="text-xs text-rose-600 font-extrabold bg-rose-50 border border-rose-100 px-3 py-2.5 rounded-xl text-center leading-relaxed font-sans">
+                  ⚠️ {passcodeError}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowClearModal(false)}
+                  disabled={isDeleting}
+                  className="flex-1 h-11 text-slate-705 text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDeleting || legacyCount === 0}
+                  className="flex-1 h-11 bg-rose-605 hover:bg-rose-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {isDeleting ? (
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isDeleting ? "Purging..." : "Confirm Purge"}</span>
+                </button>
+              </div>
+              
+              {legacyCount === 0 && (
+                <p className="text-[10px] text-center text-amber-606 text-amber-700 font-bold bg-amber-50 rounded-lg p-2 border border-amber-200">
+                  Notice: No legacy transactions older than 2 days exist in the database.
+                </p>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
