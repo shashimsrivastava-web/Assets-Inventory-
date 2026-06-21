@@ -428,7 +428,11 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
 
   // Simulate Barcode QR code scanning
   const handleSimulatedScan = (scannedId: string) => {
-    const assetIdUpper = scannedId.toUpperCase().trim();
+    let finalId = scannedId;
+    if (typeof scannedId !== "string") {
+      finalId = String(scannedId);
+    }
+    const assetIdUpper = finalId.toUpperCase().trim();
     if (activeTab === "issue") {
       setIssueAssetId(assetIdUpper);
     } else if (activeTab === "return") {
@@ -449,7 +453,6 @@ export default function IssueReturnForm({ assets, agents, transactions, role, ac
       setHandoverAssetId(assetIdUpper);
     }
     setShowScanner(false);
-    alert(`⚡ Scanned Device ID: ${scannedId}`);
   };
 
   const availableAssetsForIssue = assets.filter((a) => a.status !== AssetStatus.ISSUED && a.status !== AssetStatus.MISSING);
@@ -1141,11 +1144,16 @@ function VideoSimulator({ onScan }: { onScan: (id: string) => void }) {
 
   const isScanningRef = useRef(true);
 
+  useEffect(() => {
+    isScanningRef.current = true;
+  }, []);
+
   const { ref } = useZxing({
     onDecodeResult(result: any) {
       if (!isScanningRef.current) return;
       isScanningRef.current = false;
-      onScan(result.getText ? result.getText() : result.rawValue);
+      const text = result.getText ? result.getText() : (result.text || result.rawValue || result);
+      onScan(typeof text === "string" ? text : String(text));
     },
     onError(error: any) {
       if (
