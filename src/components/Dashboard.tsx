@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { selectBaseClass, selectStyle, optionClass } from "../lib/selectTheme";
-import { Asset, Agent, Transaction, AssetStatus } from "../types";
+import { doc, setDoc } from "firebase/firestore";
+import { shiftReleasesCol } from "../firebase";
+import { Asset, Agent, Transaction, AssetStatus, ShiftRelease, ShiftReleaseException } from "../types";
 import { Tablet, Smartphone, CreditCard, Shield, Laptop, AlertCircle, FileSpreadsheet, Search, CheckCircle, RefreshCw, AlertTriangle, Layers, Clock, HelpCircle, Layout, Scan, Camera, Share2 } from "lucide-react";
 import { sortDeviceTypes } from "../utils/deviceTypeSort";
 
@@ -10,11 +12,12 @@ interface DashboardProps {
   transactions: Transaction[];
   loading: boolean;
   onRefresh: () => void;
+  activeShift: string;
   onNavigateToAssets?: (typeFilter: string, searchTerm: string, statusFilter?: string) => void;
   onNavigateToIssueReturn?: (subTab?: "issue" | "return" | "handover") => void;
 }
 
-export default function Dashboard({ assets, agents, transactions, loading, onRefresh, onNavigateToAssets, onNavigateToIssueReturn }: DashboardProps) {
+export default function Dashboard({ assets, agents, transactions, loading, onRefresh, activeShift, onNavigateToAssets, onNavigateToIssueReturn }: DashboardProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDeviceType, setSelectedDeviceType] = useState("All");
   const [isReleaseModalOpen, setIsReleaseModalOpen] = useState(false);
@@ -65,6 +68,52 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
       `${exceptionsText}\n\n` +
       `👤 *Authorized Supervisor:* ${certReleaseSupervisorName || "N/A"} (ID: ${certReleaseSupervisorId || "N/A"})\n` +
       `🌍 *Location:* DELSM Terminal Charging Locker Station`;
+  };
+
+  const saveShiftRelease = async (type: "Standard" | "Exceptional", customSupervisor?: string, customSupervisorId?: string, customExceptions?: Array<{holderName: string, holderId: string, deviceCount: number}>) => {
+    try {
+      const releaseId = `SR-${Date.now()}`;
+      const nameOfRelease = type === "Standard" ? verifierName : (customSupervisor || releaseRemainingName || verifierName);
+      const idOfRelease = type === "Standard" ? verifierId : (customSupervisorId || releaseRemainingId || verifierId);
+      
+      const dateStr = new Date().toISOString().split("T")[0];
+      const timeStr = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+      
+      const vHash = `SHA-SR-${totalDevices}${devicesAvailable}-${idOfRelease || "NIL"}`;
+
+      let exceptionsPayload: ShiftReleaseException[] = [];
+      if (type === "Exceptional" && customExceptions) {
+        exceptionsPayload = customExceptions.map(e => ({
+          holderName: e.holderName,
+          holderId: e.holderId,
+          deviceCount: e.deviceCount
+        }));
+      }
+
+      const summaryText = type === "Standard" 
+        ? `All ${totalDevices} devices verified and stored securely. Shift fully released.`
+        : `Released with exceptions. ${customExceptions?.length || 0} custody exception(s) tracked.`;
+
+      const newRelease: ShiftRelease = {
+        id: releaseId,
+        timestamp: Date.now(),
+        date: dateStr,
+        time: timeStr,
+        shift: activeShift || "Morning",
+        releasedBy: nameOfRelease || "Unknown Supervisor",
+        releasedById: idOfRelease || "NIL",
+        type,
+        exceptions: exceptionsPayload,
+        verificationHash: vHash,
+        summary: summaryText
+      };
+
+      await setDoc(doc(shiftReleasesCol, releaseId), newRelease);
+      console.log("Successfully saved shift release to Firebase:", newRelease);
+      onRefresh(); // Refresh parent collections
+    } catch (err) {
+      console.error("Failed to save shift release to database:", err);
+    }
   };
 
   const deviceTypes = useMemo(() => {
@@ -296,7 +345,7 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
                   onClick={() => {
                     alert(`Lufthansa shift exception certificate signed by ${certReleaseSupervisorName} printed and dispatched to terminal controllers.`);
                   }}
-                  className="w-full bg-[#071d49] hover:bg-[#071d49]/90 text-white py-2.5 px-4 rounded-xl font-bold text-[11px] tracking-wider uppercase cursor-pointer border-none shadow-sm transition-all text-center animate-fadeIn"
+                  className="w-full bg-[#071d49] hover:bg-[#071d49]/90 text-white py-2.5 px-4 rounded-xl font-bold text-[11px] tracking-wider uppercase cursor-pointer border-b-4 border-[#040f2b] active:border-b-0 active:translate-y-1 transition-all text-center animate-fadeIn"
                 >
                   Print Exception Cert
                 </button>
@@ -361,7 +410,7 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
                   onClick={() => {
                     alert(`Shift handover certificate printed and dispatched to terminal controller successfully. Certified by: ${verifierName} (${verifierId}).`);
                   }}
-                  className="w-full bg-[#071d49] hover:bg-[#071d49]/90 text-white py-2.5 px-4 rounded-xl font-bold text-[11px] tracking-wider uppercase cursor-pointer border-none shadow-sm transition-all text-center animate-fadeIn"
+                  className="w-full bg-[#071d49] hover:bg-[#071d49]/90 text-white py-2.5 px-4 rounded-xl font-bold text-[11px] tracking-wider uppercase cursor-pointer border-b-4 border-[#040f2b] active:border-b-0 active:translate-y-1 transition-all text-center animate-fadeIn"
                 >
                   Print Clearance Log
                 </button>
@@ -1155,9 +1204,10 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
               </a>
               <button
                 onClick={() => {
-                  alert(`Shift handover certificate printed and dispatched to terminal controller successfully. Certified by: ${verifierName} (${verifierId}).`);
+                  saveShiftRelease("Standard");
                   setIsShiftFullyReleased(true);
                   setIsReleaseModalOpen(false);
+                  alert(`Shift handover certificate printed and dispatched to terminal controller successfully. Certified by: ${verifierName} (${verifierId}).`);
                 }}
                 className="bg-[#071d49] text-white hover:bg-[#071d49]/90 px-4 py-2 rounded-xl text-[11px] font-bold tracking-wider uppercase cursor-pointer"
               >
@@ -1165,6 +1215,7 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
               </button>
               <button
                 onClick={() => {
+                  saveShiftRelease("Standard");
                   setIsShiftFullyReleased(true);
                   setIsReleaseModalOpen(false);
                 }}
@@ -1367,6 +1418,7 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
                         setReleasedExceptionsList(exceptionPayload);
                         setCertReleaseSupervisorName(releaseRemainingName.trim());
                         setCertReleaseSupervisorId(releaseRemainingId.trim());
+                        saveShiftRelease("Exceptional", releaseRemainingName.trim(), releaseRemainingId.trim(), exceptionPayload);
                         setIsShiftReleasedWithExceptions(true);
                         setIsReturnListModalOpen(false);
                         setShowReleaseRemainingForm(false);

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { onSnapshot, doc, getDocFromServer, query, orderBy, getDocs } from "firebase/firestore";
-import { db, assetsCol, agentsCol, transactionsCol, handoversCol } from "./firebase";
+import { db, assetsCol, agentsCol, transactionsCol, handoversCol, shiftReleasesCol } from "./firebase";
 import { bootstrapDatabaseIfEmpty } from "./utils/initDb";
-import { Asset, Agent, Transaction, AlertLog, WebhookConfig, AssetStatus, Handover } from "./types";
+import { Asset, Agent, Transaction, AlertLog, WebhookConfig, AssetStatus, Handover, ShiftRelease } from "./types";
 import { getRecommendedShiftByTime } from "./utils/shiftConfig";
 
 // Component imports
@@ -42,6 +42,7 @@ export default function App() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [handovers, setHandovers] = useState<Handover[]>([]);
+  const [shiftReleases, setShiftReleases] = useState<ShiftRelease[]>([]);
   
   // App infrastructure states
   const [loading, setLoading] = useState(true);
@@ -153,11 +154,23 @@ export default function App() {
       console.warn("Handovers listener failed", error);
     });
 
+    const qShiftReleases = query(shiftReleasesCol, orderBy("timestamp", "desc"));
+    const unsubShiftReleases = onSnapshot(qShiftReleases, (snapshot) => {
+      const list: ShiftRelease[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ ...doc.data() } as ShiftRelease);
+      });
+      setShiftReleases(list);
+    }, (error) => {
+      console.warn("ShiftReleases listener failed", error);
+    });
+
     return () => {
       unsubAssets();
       unsubAgents();
       unsubTransactions();
       unsubHandovers();
+      unsubShiftReleases();
     };
   }, []);
 
@@ -577,6 +590,7 @@ export default function App() {
               transactions={transactions}
               loading={loading}
               onRefresh={handleForceSync}
+              activeShift={activeShift}
               onNavigateToAssets={(typeFilter, searchTerm, statusFilter) => {
                 setAssetTypeFilter(typeFilter || "All");
                 setAssetSearchTerm(searchTerm || "");
@@ -628,6 +642,7 @@ export default function App() {
           {activeTab === "audit" && (
             <AuditTrail
               transactions={transactions}
+              shiftReleases={shiftReleases}
               loading={loading}
               onRefresh={handleForceSync}
               role={role}

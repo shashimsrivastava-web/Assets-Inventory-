@@ -16,5 +16,8 @@ service cloud.firestore {
     match /deviceTypes/{typeId} {
       allow read, write: if true;
     }
+    match /shift_releases/{releaseId} {
+      allow read, write: if true;
+    }
   }
 }

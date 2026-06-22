@@ -76,3 +76,23 @@ export interface Handover {
   remarks?: string;
 }
 
+export interface ShiftReleaseException {
+  holderName: string;
+  holderId: string;
+  deviceCount: number;
+}
+
+export interface ShiftRelease {
+  id: string;
+  timestamp: number;
+  date: string;
+  time: string;
+  shift: string;
+  releasedBy: string;
+  releasedById: string;
+  type: "Standard" | "Exceptional";
+  exceptions?: ShiftReleaseException[];
+  verificationHash: string;
+  summary: string;
+}
+

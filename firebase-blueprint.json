@@ -198,6 +198,49 @@
         }
       },
       "required": ["id", "name"]
+    },
+    "ShiftRelease": {
+      "title": "ShiftRelease",
+      "description": "An official logging of a completed shift release or exceptional shift release certificate.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "date": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "shift": {
+          "type": "string"
+        },
+        "releasedBy": {
+          "type": "string"
+        },
+        "releasedById": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["Standard", "Exceptional"]
+        },
+        "exceptions": {
+          "type": "array",
+          "description": "List of active exceptions (outstanding employee device loans) at release snapshot"
+        },
+        "verificationHash": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "timestamp", "shift", "releasedBy", "releasedById", "type"]
     }
   },
   "firestore": {
@@ -230,6 +273,12 @@
         "$ref": "#/entities/DeviceType"
       },
       "description": "Customizable device categories managed dynamically by administrator"
+    },
+    "shift_releases/{releaseId}": {
+      "schema": {
+        "$ref": "#/entities/ShiftRelease"
+      },
+      "description": "Logs of all standard and exceptional shift clearances and releases executed"
     }
   }
 }
