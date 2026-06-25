@@ -17,13 +17,15 @@ import AlertsManager from "./components/AlertsManager";
 import AgentPortal from "./components/AgentPortal";
 
 // Sidebar Navigation Icons
-import { LayoutDashboard, Key, Laptop, Users, History, BarChart3, Bell, Shield, Info, Database, User } from "lucide-react";
+import { LayoutDashboard, Key, Laptop, Users, History, BarChart3, Bell, Shield, Info, Database, User, Menu } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 
 export default function App() {
   const [role, setRole] = useState<"Admin" | "Supervisor">("Supervisor");
   const [activeTab, setActiveTab] = useState<"dashboard" | "handover" | "assets" | "agents" | "audit" | "reports" | "alerts">("dashboard");
   const [activeShift, setActiveShift] = useState(getRecommendedShiftByTime());
   const [viewMode, setViewMode] = useState<"console" | "agent">("console");
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // Metric Navigation sync states
   const [assetSearchTerm, setAssetSearchTerm] = useState("");
@@ -409,107 +411,133 @@ export default function App() {
           {/* Left Drawer / Nav Rails */}
         <aside className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 text-slate-600 py-6 px-4 shrink-0 flex flex-col justify-between">
           <nav className="space-y-1.5">
-            <span className="px-3 text-[10px] uppercase font-bold text-slate-450 tracking-wider block mb-3 font-sans">Live Ops Console</span>
+            <span className="px-3 text-[10px] uppercase font-bold text-slate-450 tracking-wider block mb-1 font-sans">Live Ops Console</span>
 
+            {/* Menu Toggle Button */}
             <button
-              onClick={() => setActiveTab("dashboard")}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
-                activeTab === "dashboard"
-                  ? "bg-indigo-50 text-indigo-700 border-indigo-105/50 font-bold"
-                  : "border-transparent hover:bg-slate-50 hover:text-slate-900"
-              }`}
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl border border-slate-200 hover:border-slate-300 shadow-3xs transition-all active:translate-y-0.5 cursor-pointer mb-3"
             >
-              <LayoutDashboard className="w-4 h-4 text-indigo-600" />
-              Live Dashboard
-            </button>
-
-            <button
-              id="nav-tab-handover"
-              onClick={() => {
-                setIssueReturnInitialTab("issue");
-                setActiveTab("handover");
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
-                activeTab === "handover"
-                  ? "bg-indigo-50 text-indigo-700 border-indigo-105/50 font-bold"
-                  : "border-transparent hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <Key className="w-4 h-4 text-indigo-600" />
-              Issue & Return Desk
-            </button>
-
-            <button
-              onClick={() => {
-                setAssetTypeFilter("All");
-                setAssetSearchTerm("");
-                setAssetStatusFilter("All");
-                setActiveTab("assets");
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
-                activeTab === "assets"
-                  ? "bg-indigo-50 text-indigo-700 border-indigo-105/50 font-bold"
-                  : "border-transparent hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <Laptop className="w-4 h-4 text-indigo-600" />
-              Asset Inventory
-            </button>
-
-            <button
-              onClick={() => setActiveTab("agents")}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
-                activeTab === "agents"
-                  ? "bg-indigo-50 text-indigo-700 border-indigo-105/50 font-bold"
-                  : "border-transparent hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <Users className="w-4 h-4 text-indigo-600" />
-              Agent Roster
-            </button>
-
-            <button
-              onClick={() => setActiveTab("audit")}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
-                activeTab === "audit"
-                  ? "bg-indigo-50 text-indigo-700 border-indigo-105/50 font-bold"
-                  : "border-transparent hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <History className="w-4 h-4 text-indigo-600" />
-              Audit Trail logs
-            </button>
-
-            <button
-              onClick={() => setActiveTab("reports")}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
-                activeTab === "reports"
-                  ? "bg-indigo-50 text-indigo-700 border-indigo-105/50 font-bold"
-                  : "border-transparent hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <BarChart3 className="w-4 h-4 text-indigo-600" />
-              Utilization Reports
-            </button>
-
-            <button
-              onClick={() => setActiveTab("alerts")}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
-                activeTab === "alerts"
-                  ? "bg-indigo-50 text-indigo-700 border-indigo-105/50 font-bold"
-                  : "border-transparent hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Bell className="w-4 h-4 text-indigo-600" />
-                Operational Warnings
+              <div className="flex items-center gap-2">
+                <Menu className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>{isMenuOpen ? "Hide Menu" : "Show Menu"}</span>
               </div>
-              {alerts.filter(a => !a.resolved).length > 0 && (
-                <span className="bg-rose-550 text-rose-700 border border-rose-200 bg-rose-50 font-mono text-[9px] px-1.5 py-0.5 rounded-full animate-pulse font-bold">
-                  {alerts.filter(a => !a.resolved).length}
-                </span>
-              )}
+              <span className="text-[10px] text-slate-400 font-mono transition-transform duration-200" style={{ transform: isMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                ▼
+              </span>
             </button>
+
+            <AnimatePresence initial={false}>
+              {isMenuOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.25, ease: "easeInOut" }}
+                  className="overflow-hidden space-y-1.5"
+                >
+                  <button
+                    onClick={() => setActiveTab("dashboard")}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
+                      activeTab === "dashboard"
+                        ? "bg-indigo-50 text-indigo-700 border-indigo-100 font-bold"
+                        : "border-transparent hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    <LayoutDashboard className="w-4 h-4 text-indigo-600" />
+                    Live Dashboard
+                  </button>
+
+                  <button
+                    id="nav-tab-handover"
+                    onClick={() => {
+                      setIssueReturnInitialTab("issue");
+                      setActiveTab("handover");
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
+                      activeTab === "handover"
+                        ? "bg-indigo-50 text-indigo-700 border-indigo-100 font-bold"
+                        : "border-transparent hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    <Key className="w-4 h-4 text-indigo-600" />
+                    Issue & Return Desk
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setAssetTypeFilter("All");
+                      setAssetSearchTerm("");
+                      setAssetStatusFilter("All");
+                      setActiveTab("assets");
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
+                      activeTab === "assets"
+                        ? "bg-indigo-50 text-indigo-700 border-indigo-100 font-bold"
+                        : "border-transparent hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    <Laptop className="w-4 h-4 text-indigo-600" />
+                    Asset Inventory
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab("agents")}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
+                      activeTab === "agents"
+                        ? "bg-indigo-50 text-indigo-700 border-indigo-100 font-bold"
+                        : "border-transparent hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    <Users className="w-4 h-4 text-indigo-600" />
+                    Agent Roster
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab("audit")}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
+                      activeTab === "audit"
+                        ? "bg-indigo-50 text-indigo-700 border-indigo-100 font-bold"
+                        : "border-transparent hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    <History className="w-4 h-4 text-indigo-600" />
+                    Audit Trail logs
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab("reports")}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
+                      activeTab === "reports"
+                        ? "bg-indigo-50 text-indigo-700 border-indigo-100 font-bold"
+                        : "border-transparent hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    <BarChart3 className="w-4 h-4 text-indigo-600" />
+                    Utilization Reports
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab("alerts")}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border cursor-pointer ${
+                      activeTab === "alerts"
+                        ? "bg-indigo-50 text-indigo-700 border-indigo-100 font-bold"
+                        : "border-transparent hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Bell className="w-4 h-4 text-indigo-600" />
+                      Operational Warnings
+                    </div>
+                    {alerts.filter(a => !a.resolved).length > 0 && (
+                      <span className="bg-rose-550 text-rose-700 border border-rose-200 bg-rose-50 font-mono text-[9px] px-1.5 py-0.5 rounded-full animate-pulse font-bold">
+                        {alerts.filter(a => !a.resolved).length}
+                      </span>
+                    )}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </nav>
 
           <div className="space-y-3 pt-6 border-t border-slate-100">
