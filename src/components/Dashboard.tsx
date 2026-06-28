@@ -3,7 +3,7 @@ import { selectBaseClass, selectStyle, optionClass } from "../lib/selectTheme";
 import { doc, setDoc } from "firebase/firestore";
 import { shiftReleasesCol } from "../firebase";
 import { Asset, Agent, Transaction, AssetStatus, ShiftRelease, ShiftReleaseException } from "../types";
-import { Tablet, Smartphone, CreditCard, Shield, Laptop, AlertCircle, FileSpreadsheet, Search, CheckCircle, RefreshCw, AlertTriangle, Layers, Clock, HelpCircle, Layout, Scan, Camera, Share2 } from "lucide-react";
+import { Tablet, Smartphone, CreditCard, Shield, Laptop, AlertCircle, FileSpreadsheet, Search, CheckCircle, RefreshCw, AlertTriangle, Layers, Clock, HelpCircle, Layout, Scan, Camera, Share2, Users } from "lucide-react";
 import { sortDeviceTypes } from "../utils/deviceTypeSort";
 
 interface DashboardProps {
@@ -141,6 +141,20 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
     });
     return Object.values(map);
   }, [assets, transactions]);
+
+  const filteredHolders = useMemo(() => {
+    if (!searchTerm) return holdersWithAssets;
+    const term = searchTerm.toLowerCase();
+    return holdersWithAssets.filter(h => 
+      h.holderName.toLowerCase().includes(term) || 
+      h.holderId.toLowerCase().includes(term) ||
+      h.assets.some(a => 
+        a.id.toLowerCase().includes(term) || 
+        a.name.toLowerCase().includes(term) || 
+        (a.type || "").toLowerCase().includes(term)
+      )
+    );
+  }, [holdersWithAssets, searchTerm]);
 
   // Filter conditions
   const matchesSearchAndType = (device: Asset) => {
@@ -763,6 +777,77 @@ export default function Dashboard({ assets, agents, transactions, loading, onRef
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Agent Custody Overview (Grouped by Agent) */}
+      <div id="dashboard-agent-custody-grouped" className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+        <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+          <div>
+            <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-2">
+              <Users className="w-4 h-4 text-indigo-500" />
+              Agent Custody Overview (Grouped by Staff)
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-0.5">Summary of all devices currently held by individual agents</p>
+          </div>
+          <div className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-1 rounded-lg font-bold border border-indigo-100">
+            {holdersWithAssets.length} Agents with Assets
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs font-sans">
+            <thead className="bg-slate-50 text-slate-500 uppercase text-[9px] tracking-wider font-bold">
+              <tr>
+                <th className="px-4 py-3 rounded-l-xl">Agent Information</th>
+                <th className="px-4 py-3">Devices Held</th>
+                <th className="px-4 py-3 rounded-r-xl text-right">Count</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredHolders.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-4 py-8 text-center text-slate-400 italic font-sans">
+                    {searchTerm ? "No agents found matching search criteria." : "No active custody sessions found."}
+                  </td>
+                </tr>
+              ) : (
+                filteredHolders.map((holder) => (
+                  <tr key={holder.holderId} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-[10px] shrink-0 border border-indigo-200 shadow-3xs">
+                          {holder.holderName.split(" ").map(n => n[0]).join("").toUpperCase().substring(0, 2)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-800 truncate">{holder.holderName}</p>
+                          <p className="text-[10px] text-slate-450 font-mono">{holder.holderId}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex flex-wrap gap-2">
+                        {holder.assets.map((asset) => (
+                          <div key={asset.id} className="flex items-center gap-1.5 bg-white border border-slate-200 px-2 py-1 rounded-lg shadow-3xs hover:border-indigo-300 transition-colors">
+                            {getDeviceIcon(asset.type)}
+                            <div>
+                              <p className="text-[9px] font-bold text-slate-800 leading-tight">{asset.id}</p>
+                              <p className="text-[8px] text-slate-400 leading-tight">{asset.name}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100 font-bold text-[10px]">
+                        {holder.assets.length}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
