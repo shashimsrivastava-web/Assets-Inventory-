@@ -648,6 +648,7 @@ export default function App() {
           {activeTab === "assets" && (
             <AssetMaster
               assets={assets}
+              transactions={transactions}
               role={role}
               loading={loading}
               onRefresh={handleForceSync}

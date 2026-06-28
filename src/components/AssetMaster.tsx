@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { selectBaseClass, selectStyle, optionClass } from "../lib/selectTheme";
-import { Asset, AssetStatus } from "../types";
+import { Asset, AssetStatus, Transaction } from "../types";
 import { Plus, Edit2, Trash2, Smartphone, Tablet, CreditCard, Layers, Tag, Eye, RefreshCw, Printer, UploadCloud, FileSpreadsheet, Scan, Camera, Image, Link, Settings, X, Wrench, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
 import { addDoc, deleteDoc, doc, setDoc, onSnapshot } from "firebase/firestore";
 import { assetsCol, deviceTypesCol } from "../firebase";
@@ -10,6 +10,7 @@ import { read, utils, writeFile } from "xlsx";
 
 interface AssetMasterProps {
   assets: Asset[];
+  transactions: Transaction[];
   role: "Admin" | "Supervisor";
   loading: boolean;
   onRefresh: () => void;
@@ -76,7 +77,7 @@ function generateCode39SVG(data: string) {
   );
 }
 
-export default function AssetMaster({ assets, role, loading, onRefresh, onAddAlert, initialTypeFilter, initialSearchTerm, initialStatusFilter }: AssetMasterProps) {
+export default function AssetMaster({ assets, transactions, role, loading, onRefresh, onAddAlert, initialTypeFilter, initialSearchTerm, initialStatusFilter }: AssetMasterProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
 
@@ -1515,6 +1516,14 @@ export default function AssetMaster({ assets, role, loading, onRefresh, onAddAle
 
                   <h4 className="font-bold text-slate-900 text-sm mt-2 line-clamp-1">{asset.name}</h4>
 
+                  {asset.status === AssetStatus.ISSUED && asset.currentAssignmentId && (
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <div className="w-1 h-1 rounded-full bg-indigo-400" />
+                      <span className="text-[10px] font-bold text-indigo-600/80 truncate">
+                        Issued to: {transactions.find(tx => tx.id === asset.currentAssignmentId)?.agentName || "Unknown Staff"}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
